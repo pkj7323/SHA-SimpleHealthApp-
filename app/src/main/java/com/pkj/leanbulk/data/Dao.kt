@@ -191,4 +191,7 @@ interface BodyRecordDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(record: BodyRecord)
+
+    @Query("DELETE FROM body_record WHERE id = :id")
+    suspend fun delete(id: Long)
 }

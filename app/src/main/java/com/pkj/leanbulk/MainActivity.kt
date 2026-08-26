@@ -28,6 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import com.pkj.leanbulk.ui.BodyRecordScreen
 import com.pkj.leanbulk.ui.ExportScreen
 import com.pkj.leanbulk.ui.HistoryScreen
 import com.pkj.leanbulk.ui.MainViewModel
@@ -123,7 +124,12 @@ private fun TodayScreen(vm: MainViewModel, subTab: Int, onSubTabChange: (Int) ->
         TabRow(selectedTabIndex = subTab) {
             Tab(selected = subTab == 0, onClick = { onSubTabChange(0) }, text = { Text("식단") })
             Tab(selected = subTab == 1, onClick = { onSubTabChange(1) }, text = { Text("운동") })
+            Tab(selected = subTab == 2, onClick = { onSubTabChange(2) }, text = { Text("신체") })
         }
-        if (subTab == 0) TodayDietScreen(vm) else TodayWorkoutScreen(vm)
+        when (subTab) {
+            0 -> TodayDietScreen(vm)
+            1 -> TodayWorkoutScreen(vm)
+            else -> BodyRecordScreen(vm)
+        }
     }
 }

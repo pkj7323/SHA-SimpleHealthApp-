@@ -126,4 +126,6 @@ class Repository(private val db: AppDatabase) {
     fun observeBodyRecords(): Flow<List<BodyRecord>> = bodyRecordDao.observeAll()
 
     suspend fun upsertBodyRecord(record: BodyRecord) = bodyRecordDao.upsert(record)
+
+    suspend fun deleteBodyRecord(id: Long) = bodyRecordDao.delete(id)
 }

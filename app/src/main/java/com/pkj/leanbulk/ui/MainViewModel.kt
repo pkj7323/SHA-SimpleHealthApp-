@@ -369,6 +369,25 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
         }
     }
 
+    // ===================== 신체 기록 =====================
+
+    /**
+     * 체지방률은 직접 적지 않았으면 체중·체지방량으로 계산해준다.
+     * 둘 중 하나라도 비어 있거나 체중이 0이면 계산하지 않고 비워둔다.
+     */
+    fun saveBodyRecord(record: BodyRecord) {
+        val percent = record.fatPercent
+            ?: record.fatMassKg?.takeIf { record.weightKg > 0 }?.let { it / record.weightKg * 100 }
+        viewModelScope.launch {
+            repository.upsertBodyRecord(record.copy(fatPercent = percent))
+            _toast.value = "${record.date} 신체 기록 저장됨"
+        }
+    }
+
+    fun deleteBodyRecord(id: Long) {
+        viewModelScope.launch { repository.deleteBodyRecord(id) }
+    }
+
     // ===================== 목표 =====================
 
     fun saveTarget(kcal: Double, protein: Double, carbs: Double, fat: Double, sugar: Double) {

@@ -45,6 +45,7 @@ object XlsxExporter {
             writeExerciseListSheet(wb, routines)
             writeBodyRecordSheet(wb, bodyRecords)
             writeDietCheckSheet(wb, meals, target)
+            writeDietDetailSheet(wb, meals)
             writeHowToSheet(wb)
 
             wb.finish()
@@ -214,6 +215,32 @@ object XlsxExporter {
         }
     }
 
+    /**
+     * 원본 시트 5개는 그대로 두고, "뭐를 먹었는지"를 남기는 시트를 뒤에 더한다.
+     * 하루 합계만 있는 식단체크 시트만으로는 메뉴를 되짚어볼 수 없기 때문.
+     */
+    private fun writeDietDetailSheet(wb: Workbook, meals: List<MealEntry>) {
+        val ws = wb.newWorksheet("식단상세")
+        ws.value(0, 0, "끼니별 식단 기록")
+        ws.value(1, 0, "섭취 여부까지 그대로 남긴다. 영양정보를 모르는 끼니는 빈 칸으로 둔다.")
+        val headers = listOf("날짜", "끼니", "메뉴", "섭취", "칼로리", "단백질(g)", "탄수(g)", "지방(g)", "당(g)")
+        headers.forEachIndexed { c, h -> ws.value(2, c, h) }
+
+        var row = 3
+        meals.sortedWith(compareBy({ it.date }, { it.orderIndex })).forEach { m ->
+            ws.value(row, 0, m.date)
+            ws.value(row, 1, m.slotName)
+            if (m.menuText.isNotBlank()) ws.value(row, 2, m.menuText)
+            ws.value(row, 3, if (m.eaten) "O" else "X")
+            m.macros.kcal?.let { ws.value(row, 4, it) }
+            m.macros.protein?.let { ws.value(row, 5, it) }
+            m.macros.carbs?.let { ws.value(row, 6, it) }
+            m.macros.fat?.let { ws.value(row, 7, it) }
+            m.macros.sugar?.let { ws.value(row, 8, it) }
+            row++
+        }
+    }
+
     private fun writeHowToSheet(wb: Workbook) {
         val ws = wb.newWorksheet("사용법")
         val lines = listOf(
@@ -223,6 +250,7 @@ object XlsxExporter {
             "· 종목목록 — 앱에 등록된 루틴별 기본 종목/세팅",
             "· 신체기록 — 체중/체성분 측정 기록",
             "· 식단체크 — 하루 섭취 칼로리 및 매크로 합계 (체크한 끼니만 집계)",
+            "· 식단상세 — 끼니별로 실제 먹은 메뉴와 영양정보 (새로 추가된 시트)",
             "· 세트마다 무게가 다르거나 5세트 이상이면 같은 무게끼리 묶어 여러 줄로 나눠 기록됩니다.",
             "· 이 파일은 앱에서 자동 생성되었습니다. 수식 대신 계산된 값이 그대로 들어 있습니다."
         )
