@@ -93,6 +93,43 @@ private fun BodyRecordForm(
     var tool by remember(initial) { mutableStateOf(initial?.tool ?: "") }
     var memo by remember(initial) { mutableStateOf(initial?.memo ?: "") }
 
+    // 체지방량/체지방률 중 방금 직접 입력한 쪽을 "기준"으로 삼아 나머지 하나를 실시간으로 채운다.
+    var fatDrivenBy by remember(initial) {
+        mutableStateOf<FatField?>(
+            when {
+                initial?.fatPercent != null -> FatField.PERCENT
+                initial?.fatMassKg != null -> FatField.MASS
+                else -> null
+            }
+        )
+    }
+
+    fun onWeightChange(value: Double?) {
+        weight = value
+        val w = value
+        if (w != null && w > 0) {
+            when (fatDrivenBy) {
+                FatField.PERCENT -> fatPercent?.let { fatMass = round1(w * it / 100) }
+                FatField.MASS -> fatMass?.let { fatPercent = round1(it / w * 100) }
+                null -> Unit
+            }
+        }
+    }
+
+    fun onFatMassChange(value: Double?) {
+        fatMass = value
+        fatDrivenBy = FatField.MASS
+        val w = weight
+        if (value != null && w != null && w > 0) fatPercent = round1(value / w * 100)
+    }
+
+    fun onFatPercentChange(value: Double?) {
+        fatPercent = value
+        fatDrivenBy = FatField.PERCENT
+        val w = weight
+        if (value != null && w != null && w > 0) fatMass = round1(w * value / 100)
+    }
+
     val context = LocalContext.current
 
     Column {
@@ -133,6 +170,7 @@ private fun BodyRecordForm(
                     muscle = null
                     fatMass = null
                     fatPercent = null
+                    fatDrivenBy = null
                     waist = null
                     memo = ""
                 }
@@ -149,24 +187,23 @@ private fun BodyRecordForm(
             Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            NullableNumberField("체중(kg)", weight) { weight = it }
+            NullableNumberField("체중(kg)", weight, ::onWeightChange)
             NullableNumberField("골격근량", muscle) { muscle = it }
-            NullableNumberField("체지방량", fatMass) { fatMass = it }
+            NullableNumberField("체지방량", fatMass, ::onFatMassChange)
         }
         Row(
             Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            NullableNumberField("체지방률%", fatPercent) { fatPercent = it }
+            NullableNumberField("체지방률%", fatPercent, ::onFatPercentChange)
             NullableNumberField("허리(cm)", waist) { waist = it }
         }
 
-        // 체지방률을 비워두면 체중·체지방량으로 자동 계산되므로 미리 알려준다.
-        val currentWeight = weight
-        val currentFatMass = fatMass
-        if (fatPercent == null && currentFatMass != null && currentWeight != null && currentWeight > 0) {
+        // 체지방량/체지방률 중 하나만 입력해도 체중을 기준으로 나머지가 실시간으로 계산된다.
+        if (weight != null && weight!! > 0 && fatDrivenBy != null) {
             Text(
-                "체지방률은 자동 계산됩니다 → 약 ${(currentFatMass / currentWeight * 100).roundToInt()}%",
+                if (fatDrivenBy == FatField.PERCENT) "체지방량은 체지방률 기준으로 자동 계산됩니다"
+                else "체지방률은 체지방량 기준으로 자동 계산됩니다",
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 4.dp)
             )
@@ -218,3 +255,8 @@ private fun RecordCard(record: BodyRecord, onEdit: () -> Unit, onDelete: () -> U
 
 private fun fmt(value: Double): String =
     if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString()
+
+/** 체지방량/체지방률 중 사용자가 방금 직접 입력한 쪽. 나머지는 이 값을 기준으로 계산된다. */
+private enum class FatField { MASS, PERCENT }
+
+private fun round1(value: Double): Double = (value * 10).roundToInt() / 10.0
