@@ -1,5 +1,12 @@
 package com.pkj.leanbulk.data
 
+import androidx.room.withTransaction
+import com.pkj.leanbulk.data.backup.Snapshot
+import com.pkj.leanbulk.data.backup.SnapshotCodec
+import com.pkj.leanbulk.data.backup.SnapshotCodec.toDto
+import com.pkj.leanbulk.data.backup.SnapshotCodec.toEntity
+import com.pkj.leanbulk.data.backup.SnapshotCodec.toEntityPairs
+import com.pkj.leanbulk.data.backup.SnapshotCodec.toWorkoutDayDtos
 import kotlinx.coroutines.flow.Flow
 
 class Repository(private val db: AppDatabase) {
@@ -128,4 +135,60 @@ class Repository(private val db: AppDatabase) {
     suspend fun upsertBodyRecord(record: BodyRecord) = bodyRecordDao.upsert(record)
 
     suspend fun deleteBodyRecord(id: Long) = bodyRecordDao.delete(id)
+
+    // ---------- 백업 스냅샷 ----------
+
+    /** 지금 DB 전체를 스냅샷 하나로 뜬다. 백업 파일과 동기화가 같은 포맷을 쓴다. */
+    suspend fun exportSnapshot(exportedAt: String): Snapshot = db.withTransaction {
+        Snapshot(
+            exportedAt = exportedAt,
+            meals = mealDao.getAll().map { it.toDto() },
+            workoutDays = workoutDao.getAll().toWorkoutDayDtos(),
+            routines = routineDao.getAll().map { it.toDto() },
+            dietTemplates = dietTemplateDao.getAll().map { it.toDto() },
+            foods = foodDao.getAll().map { it.toDto() },
+            bodyRecords = bodyRecordDao.getAll().map { it.toDto() },
+            target = dietTargetDao.get()?.toDto()
+        )
+    }
+
+    /**
+     * 스냅샷으로 DB를 통째로 교체한다.
+     *
+     * 트랜잭션 하나로 묶는 게 중요하다 — 중간에 실패해서 반쯤 덮어쓴 상태가 제일 나쁘다.
+     * 순서·orderIndex를 그대로 살리려고 `insertWithExercises` 같은 헬퍼 대신 하위 DAO를
+     * 직접 조합한다(헬퍼는 orderIndex를 새로 매긴다).
+     */
+    suspend fun importSnapshot(snapshot: Snapshot) = db.withTransaction {
+        mealDao.deleteAll()
+        workoutDao.deleteAll()
+        routineDao.deleteAll()
+        dietTemplateDao.deleteAll()
+        foodDao.deleteAll()
+        bodyRecordDao.deleteAll()
+
+        mealDao.insertAll(snapshot.meals.map { it.toEntity() })
+
+        snapshot.workoutDays.forEach { day ->
+            workoutDao.replaceDay(day.date, day.toEntityPairs())
+        }
+
+        snapshot.routines.forEach { dto ->
+            val id = routineDao.insertRoutine(Routine(name = dto.name, orderIndex = dto.orderIndex))
+            if (dto.exercises.isNotEmpty()) {
+                routineDao.insertExercises(dto.exercises.map { it.toEntity(id) })
+            }
+        }
+
+        snapshot.dietTemplates.forEach { dto ->
+            val id = dietTemplateDao.insertTemplate(DietTemplate(name = dto.name, orderIndex = dto.orderIndex))
+            if (dto.meals.isNotEmpty()) {
+                dietTemplateDao.insertMeals(dto.meals.map { it.toEntity(id) })
+            }
+        }
+
+        snapshot.foods.forEach { foodDao.insert(it.toEntity()) }
+        snapshot.bodyRecords.forEach { bodyRecordDao.upsert(it.toEntity()) }
+        snapshot.target?.let { dietTargetDao.upsert(it.toEntity()) }
+    }
 }

@@ -28,7 +28,10 @@ app/src/main/java/com/pkj/leanbulk/
 │   ├── Dao.kt
 │   ├── Repository.kt
 │   ├── SeedData.kt       # 첫 실행 시 깔리는 기본 루틴/식단표
-│   └── MacroEstimator.kt # 영양정보 미입력 시 어림값 추정
+│   ├── MacroEstimator.kt # 영양정보 미입력 시 어림값 추정
+│   └── backup/           # 백업·동기화용 JSON 스냅샷 포맷 (아직 UI 없음)
+│       ├── Snapshot.kt   # 와이어 포맷 DTO. 엔티티와 일부러 분리해둠
+│       └── SnapshotCodec.kt
 ├── ui/                   # Compose 화면 + MainViewModel
 │   ├── MainViewModel.kt  # 날짜 상태, 자동 저장(디바운스), 자정 감시
 │   ├── TodayDietScreen.kt / TodayWorkoutScreen.kt / BodyRecordScreen.kt
@@ -39,6 +42,11 @@ app/src/main/java/com/pkj/leanbulk/
 └── MainActivity.kt
 ```
 
+## 앞으로 할 것
+
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — 만들려는 기능과 그 순서
+- [`docs/SYNC-DESIGN.md`](docs/SYNC-DESIGN.md) — 폰-PC 동기화 저장 구조 설계
+
 ## 빌드 & 실행
 
 ```bash
@@ -46,6 +54,14 @@ app/src/main/java/com/pkj/leanbulk/
 ```
 
 Android Studio에서 열어 에뮬레이터/실기기로 Run 하면 된다.
+
+### 테스트
+
+```bash
+./gradlew connectedDebugAndroidTest
+```
+
+백업 JSON 왕복이 무손실인지 검증한다. Room을 실제로 띄워야 해서 **에뮬레이터나 실기기가 연결돼 있어야** 한다.
 
 ## 내보낸 xlsx 빠르게 확인하기 (에뮬레이터 사용 시)
 

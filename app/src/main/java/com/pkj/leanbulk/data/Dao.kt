@@ -16,11 +16,18 @@ interface MealDao {
     @Query("SELECT * FROM meal_entry ORDER BY date DESC, orderIndex")
     fun observeAll(): Flow<List<MealEntry>>
 
+    /** 백업 내보내기용 일회성 조회. 화면 갱신이 아니라 스냅샷을 뜨는 용도다. */
+    @Query("SELECT * FROM meal_entry ORDER BY date, orderIndex")
+    suspend fun getAll(): List<MealEntry>
+
     @Query("SELECT COUNT(*) FROM meal_entry WHERE date = :date")
     suspend fun countForDate(date: String): Int
 
     @Query("DELETE FROM meal_entry WHERE date = :date")
     suspend fun deleteByDate(date: String)
+
+    @Query("DELETE FROM meal_entry")
+    suspend fun deleteAll()
 
     @Insert
     suspend fun insertAll(entries: List<MealEntry>)
@@ -40,8 +47,17 @@ interface DietTemplateDao {
     @Query("SELECT * FROM diet_template ORDER BY orderIndex")
     fun observeAll(): Flow<List<DietTemplateWithMeals>>
 
+    /** 백업 내보내기용 일회성 조회. */
+    @Transaction
+    @Query("SELECT * FROM diet_template ORDER BY orderIndex")
+    suspend fun getAll(): List<DietTemplateWithMeals>
+
     @Query("SELECT COUNT(*) FROM diet_template")
     suspend fun count(): Int
+
+    /** 자식(diet_template_meal)은 외래키 CASCADE로 같이 지워진다. */
+    @Query("DELETE FROM diet_template")
+    suspend fun deleteAll()
 
     @Query("SELECT COALESCE(MAX(orderIndex), -1) + 1 FROM diet_template")
     suspend fun nextOrderIndex(): Int
@@ -80,8 +96,15 @@ interface FoodDao {
     @Query("SELECT * FROM food_item ORDER BY usedCount DESC, name")
     fun observeAll(): Flow<List<FoodItem>>
 
+    /** 백업 내보내기용 일회성 조회. */
+    @Query("SELECT * FROM food_item ORDER BY name")
+    suspend fun getAll(): List<FoodItem>
+
     @Query("SELECT * FROM food_item WHERE name = :name LIMIT 1")
     suspend fun findByName(name: String): FoodItem?
+
+    @Query("DELETE FROM food_item")
+    suspend fun deleteAll()
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(item: FoodItem)
@@ -109,6 +132,10 @@ interface DietTargetDao {
     @Query("SELECT * FROM diet_target WHERE id = 1")
     fun observe(): Flow<DietTarget?>
 
+    /** 백업 내보내기용 일회성 조회. */
+    @Query("SELECT * FROM diet_target WHERE id = 1")
+    suspend fun get(): DietTarget?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(target: DietTarget)
 
@@ -127,11 +154,20 @@ interface WorkoutDao {
     @Query("SELECT * FROM workout_exercise ORDER BY date DESC, orderIndex")
     fun observeAll(): Flow<List<ExerciseWithSets>>
 
+    /** 백업 내보내기용 일회성 조회. */
+    @Transaction
+    @Query("SELECT * FROM workout_exercise ORDER BY date, orderIndex")
+    suspend fun getAll(): List<ExerciseWithSets>
+
     @Query("SELECT COUNT(*) FROM workout_exercise WHERE date = :date")
     suspend fun countForDate(date: String): Int
 
     @Query("DELETE FROM workout_exercise WHERE date = :date")
     suspend fun deleteByDate(date: String)
+
+    /** 자식(workout_set)은 외래키 CASCADE로 같이 지워진다. */
+    @Query("DELETE FROM workout_exercise")
+    suspend fun deleteAll()
 
     @Insert
     suspend fun insertExercise(exercise: WorkoutExercise): Long
@@ -157,8 +193,17 @@ interface RoutineDao {
     @Query("SELECT * FROM routine ORDER BY orderIndex")
     fun observeAll(): Flow<List<RoutineWithExercises>>
 
+    /** 백업 내보내기용 일회성 조회. */
+    @Transaction
+    @Query("SELECT * FROM routine ORDER BY orderIndex")
+    suspend fun getAll(): List<RoutineWithExercises>
+
     @Query("SELECT COUNT(*) FROM routine")
     suspend fun count(): Int
+
+    /** 자식(routine_exercise)은 외래키 CASCADE로 같이 지워진다. */
+    @Query("DELETE FROM routine")
+    suspend fun deleteAll()
 
     @Query("SELECT COALESCE(MAX(orderIndex), -1) + 1 FROM routine")
     suspend fun nextOrderIndex(): Int
@@ -189,9 +234,16 @@ interface BodyRecordDao {
     @Query("SELECT * FROM body_record ORDER BY date DESC")
     fun observeAll(): Flow<List<BodyRecord>>
 
+    /** 백업 내보내기용 일회성 조회. */
+    @Query("SELECT * FROM body_record ORDER BY date")
+    suspend fun getAll(): List<BodyRecord>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(record: BodyRecord)
 
     @Query("DELETE FROM body_record WHERE id = :id")
     suspend fun delete(id: Long)
+
+    @Query("DELETE FROM body_record")
+    suspend fun deleteAll()
 }

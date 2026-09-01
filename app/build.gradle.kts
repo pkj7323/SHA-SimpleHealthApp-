@@ -5,6 +5,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 // 서명 정보는 keystore.properties(gitignore 대상)에서만 읽는다. 커밋되는 파일엔 비밀번호를 두지 않는다.
@@ -23,6 +24,7 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -84,8 +86,16 @@ dependencies {
     implementation("androidx.room:room-ktx:2.8.4")
     ksp("androidx.room:room-compiler:2.8.4")
 
+    // JSON 백업/복원 · 동기화 스냅샷 포맷
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+
     // xlsx 내보내기 전용 (쓰기 전용, 안드로이드에서 가볍게 동작)
     implementation("org.dhatim:fastexcel:0.17.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // JSON 왕복이 무손실인지 검증하는 계측 테스트용
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.room:room-testing:2.8.4")
 }
