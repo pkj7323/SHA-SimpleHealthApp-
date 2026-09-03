@@ -52,15 +52,28 @@ class MigrationTest {
      */
     @Test
     fun 마이그레이션이_기존_기록을_지우지_않는다() {
-        helper.createDatabase(TEST_DB, 4).use { db ->
+        helper.createDatabase(TEST_DB, oldestExportedVersion).use { db ->
             db.execSQL("INSERT INTO routine (name, orderIndex) VALUES ('내가 만든 루틴', 0)")
             db.execSQL(
                 "INSERT INTO body_record (date, weightKg, fatPercent, tool, memo) " +
                     "VALUES ('2026-08-28', 74.3, 15.07, '인바디', '')"
             )
+            db.execSQL(
+                "INSERT INTO workout_exercise (id, date, routineName, orderIndex, exerciseName, defaultSetting, memo) " +
+                    "VALUES (1, '2026-08-30', '가슴/삼두', 0, '벤치 프레스 머신 (다리 올림)', '5x5', '')"
+            )
+            db.execSQL(
+                "INSERT INTO workout_set (exerciseId, setIndex, weightKg, reps, done) VALUES (1, 0, 62.5, 8, 1)"
+            )
         }
 
-        helper.runMigrationsAndValidate(TEST_DB, 5, true, *AppDatabase.MIGRATIONS).use { db ->
+        // 4 → 현재 버전까지 사슬을 전부 탄다.
+        helper.runMigrationsAndValidate(
+            TEST_DB,
+            AppDatabase.VERSION,
+            true,
+            *AppDatabase.MIGRATIONS
+        ).use { db ->
             db.query("SELECT name FROM routine").use { c ->
                 assertTrue("루틴이 사라졌다", c.moveToFirst())
                 assertEquals("내가 만든 루틴", c.getString(0))
@@ -68,6 +81,16 @@ class MigrationTest {
             db.query("SELECT weightKg FROM body_record").use { c ->
                 assertTrue("신체 기록이 사라졌다", c.moveToFirst())
                 assertEquals(74.3, c.getDouble(0), 0.001)
+            }
+            db.query("SELECT exerciseName FROM workout_exercise").use { c ->
+                assertTrue("운동 기록이 사라졌다", c.moveToFirst())
+                assertEquals("벤치 프레스 머신 (다리 올림)", c.getString(0))
+            }
+            db.query("SELECT weightKg, reps, durationSec FROM workout_set").use { c ->
+                assertTrue("세트가 사라졌다", c.moveToFirst())
+                assertEquals(62.5, c.getDouble(0), 0.001)
+                assertEquals(8, c.getInt(1))
+                assertTrue("새로 추가된 시간 컬럼은 비어 있어야 한다", c.isNull(2))
             }
         }
     }

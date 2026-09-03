@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 
 /**
@@ -20,6 +21,38 @@ internal val MIGRATION_4_5 = Migration(4, 5) { db ->
     )
 }
 
+/**
+ * 5 → 6: 종목 카탈로그(`exercise`) 추가 + 기록·루틴에 카탈로그 연결과 추적 방식 컬럼 추가.
+ *
+ * 새 컬럼은 전부 nullable이거나 기본값이 있어서 기존 행이 그대로 살아남는다.
+ * 카탈로그 내용을 채우고 기존 기록을 연결하는 건 여기가 아니라 시드 2단계가 한다
+ * (마이그레이션에 데이터를 넣으면 버전마다 누적돼서 감당이 안 된다).
+ */
+internal val MIGRATION_5_6 = Migration(5, 6) { db ->
+    db.execSQL(
+        "CREATE TABLE IF NOT EXISTS `exercise` (" +
+            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+            "`slug` TEXT NOT NULL, `name` TEXT NOT NULL, `bodyPart` TEXT NOT NULL, " +
+            "`equipment` TEXT NOT NULL, `trackingType` TEXT NOT NULL, `source` TEXT NOT NULL, " +
+            "`hidden` INTEGER NOT NULL)"
+    )
+    db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_exercise_slug` ON `exercise` (`slug`)")
+    db.execSQL("CREATE INDEX IF NOT EXISTS `index_exercise_name` ON `exercise` (`name`)")
+
+    db.execSQL("ALTER TABLE `workout_set` ADD COLUMN `durationSec` INTEGER")
+    db.execSQL("ALTER TABLE `workout_set` ADD COLUMN `distanceM` REAL")
+
+    db.execSQL("ALTER TABLE `workout_exercise` ADD COLUMN `exerciseId` INTEGER")
+    db.execSQL(
+        "ALTER TABLE `workout_exercise` ADD COLUMN `trackingType` TEXT NOT NULL DEFAULT 'WEIGHT_REPS'"
+    )
+
+    db.execSQL("ALTER TABLE `routine_exercise` ADD COLUMN `exerciseId` INTEGER")
+    db.execSQL(
+        "ALTER TABLE `routine_exercise` ADD COLUMN `trackingType` TEXT NOT NULL DEFAULT 'WEIGHT_REPS'"
+    )
+}
+
 @Database(
     entities = [
         MealEntry::class,
@@ -32,11 +65,13 @@ internal val MIGRATION_4_5 = Migration(4, 5) { db ->
         FoodItem::class,
         DietTarget::class,
         BodyRecord::class,
-        AppMeta::class
+        AppMeta::class,
+        Exercise::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
+@TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun mealDao(): MealDao
     abstract fun workoutDao(): WorkoutDao
@@ -46,6 +81,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun dietTargetDao(): DietTargetDao
     abstract fun bodyRecordDao(): BodyRecordDao
     abstract fun appMetaDao(): AppMetaDao
+    abstract fun exerciseDao(): ExerciseDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null
@@ -60,10 +96,10 @@ abstract class AppDatabase : RoomDatabase() {
          * 그래서 버전을 올릴 때는 반드시 [MIGRATIONS]에 이주 코드를 하나 추가해야 한다.
          * 빠뜨리면 앱이 열리다 죽으므로 조용히 넘어가지 않는다.
          */
-        internal val MIGRATIONS = arrayOf(MIGRATION_4_5)
+        internal val MIGRATIONS = arrayOf(MIGRATION_4_5, MIGRATION_5_6)
 
         /** 마이그레이션 테스트가 참조한다. `@Database`의 version과 항상 같아야 한다. */
-        internal const val VERSION = 5
+        internal const val VERSION = 6
 
         fun get(context: Context): AppDatabase =
             instance ?: synchronized(this) {

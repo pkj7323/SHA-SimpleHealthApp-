@@ -79,9 +79,87 @@ class SeedVersionTest {
         assertEquals("지운 루틴이 다시 깔렸다", afterDelete, repo.observeRoutines().first().size)
     }
 
+    // ===================== 종목 카탈로그 (시드 2단계) =====================
+
+    @Test
+    fun 카탈로그가_깔리고_기존_루틴이_이름으로_연결된다() = runBlocking {
+        repo.applySeeds()
+
+        val catalog = repo.observeExercises().first()
+        assertEquals("카탈로그 종목 수", SeedData.exerciseCatalog.size, catalog.size)
+
+        // 시드 루틴의 종목명이 카탈로그 이름과 같으므로 전부 연결돼야 한다.
+        val unlinked = repo.observeRoutines().first()
+            .flatMap { it.exercises }
+            .filter { it.exerciseId == null }
+        assertTrue(
+            "카탈로그에 못 붙은 루틴 종목이 있다: ${unlinked.map { it.exerciseName }}",
+            unlinked.isEmpty()
+        )
+    }
+
+    /** 시간형 종목을 고르면 추적 방식이 따라와야 입력 칸이 바뀐다. */
+    @Test
+    fun 시간형_종목의_추적방식이_루틴에도_전달된다() = runBlocking {
+        repo.applySeeds()
+
+        val carry = repo.observeRoutines().first()
+            .flatMap { it.exercises }
+            .firstOrNull { it.exerciseName == "수트케이스 캐리" }
+
+        assertTrue("수트케이스 캐리가 시드 루틴에 있어야 한다", carry != null)
+        assertEquals(TrackingType.WEIGHT_TIME, carry!!.trackingType)
+    }
+
+    @Test
+    fun 카탈로그도_여러_번_돌려도_중복되지_않는다() = runBlocking {
+        repo.applySeeds()
+        val afterFirst = repo.observeExercises().first().size
+
+        db.appMetaDao().upsert(AppMeta(seedVersion = 0)) // 밀린 시드가 있는 상황을 흉내
+        repo.applySeeds()
+
+        assertEquals("카탈로그가 중복으로 쌓였다", afterFirst, repo.observeExercises().first().size)
+    }
+
+    /**
+     * 숨김이 필요한 이유를 못 박는다. SEED 항목은 지워도 다음 시드 실행 때 slug로
+     * 되살아나므로, 숨김 상태가 유지돼야 사용자가 치운 종목이 다시 안 나타난다.
+     */
+    @Test
+    fun 숨긴_종목은_시드를_다시_돌려도_숨은_채로_있다() = runBlocking {
+        repo.applySeeds()
+        val target = repo.observeExercises().first().first()
+        repo.hideExercise(target.id)
+
+        val afterHide = repo.observeExercises().first()
+        assertTrue("숨긴 종목이 목록에서 빠져야 한다", afterHide.none { it.id == target.id })
+
+        db.appMetaDao().upsert(AppMeta(seedVersion = 0))
+        repo.applySeeds()
+
+        assertTrue(
+            "숨긴 종목이 시드 갱신으로 되살아났다",
+            repo.observeExercises().first().none { it.id == target.id }
+        )
+    }
+
+    @Test
+    fun 사용자가_추가한_종목은_시드_갱신에_안_지워진다() = runBlocking {
+        repo.applySeeds()
+        val mine = repo.addUserExercise("내가 만든 종목", "코어", "맨몸", TrackingType.TIME)
+
+        db.appMetaDao().upsert(AppMeta(seedVersion = 0))
+        repo.applySeeds()
+
+        val found = repo.observeExercises().first().firstOrNull { it.id == mine.id }
+        assertTrue("사용자 종목이 사라졌다", found != null)
+        assertEquals(TrackingType.TIME, found!!.trackingType)
+        assertEquals(ItemSource.USER, found.source)
+    }
+
     /**
      * 반대 방향 — 옛 백업(시드 버전이 낮음)을 불러오면 밀린 시드가 채워져야 한다.
-     * 여기서는 아직 1단계뿐이라 "다시 돌아간다"는 사실만 확인한다.
      */
     @Test
     fun 시드_버전이_낮으면_다시_적용된다() = runBlocking {

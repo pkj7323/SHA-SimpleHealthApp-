@@ -1,5 +1,6 @@
 package com.pkj.leanbulk.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -103,6 +104,58 @@ data class AppMeta(
     val seedVersion: Int = 0
 )
 
+/**
+ * 종목을 무엇으로 재는지. 종목마다 붙어 있고, 고르는 순간 입력 칸이 이걸 따라 바뀐다.
+ *
+ * 예전에는 무게×횟수 칸밖에 없어서 플랭크·파머스캐리 같은 건 `defaultSetting`에
+ * "30~40초"처럼 **글자로만 적히고 실제로는 기록되지 않았다.**
+ */
+enum class TrackingType {
+    /** 벤치프레스 등 대부분 */
+    WEIGHT_REPS,
+    /** 푸시업·크런치처럼 맨몸으로 횟수만 */
+    REPS,
+    /** 플랭크처럼 버틴 시간만 */
+    TIME,
+    /** 파머스캐리·수트케이스 캐리처럼 무게를 들고 버틴 시간 */
+    WEIGHT_TIME,
+    /** 러닝·사이클 등 유산소 */
+    DISTANCE_TIME
+}
+
+/** 앱이 깔아준 항목인지, 사용자가 직접 추가한 것인지. 시드 갱신은 [SEED]만 건드린다. */
+enum class ItemSource { SEED, USER }
+
+/**
+ * 운동 종목 카탈로그. 기록에서 이름 대신 여기서 골라 넣는다.
+ *
+ * [slug]가 기기 간 정체성이다. auto id는 기기마다 달라서 의미가 없으므로 로컬 전용으로만
+ * 쓰고, 시드 갱신과 백업 파일 대조는 전부 slug 기준으로 한다. 덕분에 앱을 업데이트해
+ * 시드를 늘려도 기존 기록의 참조가 깨지지 않는다.
+ */
+@Entity(
+    tableName = "exercise",
+    indices = [Index(value = ["slug"], unique = true), Index(value = ["name"])]
+)
+data class Exercise(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val slug: String,
+    val name: String,
+    /** 가슴 / 등 / 어깨 / 하체 / 팔 / 코어 / 유산소 */
+    val bodyPart: String,
+    /** 바벨 / 덤벨 / 머신 / 케이블 / 맨몸 / 기타 */
+    val equipment: String,
+    val trackingType: TrackingType,
+    val source: ItemSource,
+    /**
+     * 사용자가 안 쓰겠다고 치운 종목.
+     *
+     * **지우지 않고 숨기는 이유**: SEED 항목을 정말로 삭제하면 다음 시드 실행 때
+     * slug upsert로 되살아난다. 숨김 상태는 시드 갱신이 건드리지 않는다.
+     */
+    val hidden: Boolean = false
+)
+
 /** 하루 운동에 포함된 종목 하나. 세트는 workout_set 테이블에 따로 저장된다. */
 @Entity(
     tableName = "workout_exercise",
@@ -113,7 +166,23 @@ data class WorkoutExercise(
     val date: String,
     val routineName: String,
     val orderIndex: Int,
+    /**
+     * 카탈로그를 안 거치고 직접 입력할 수도 있어서 nullable이다.
+     * [exerciseName]을 함께 남기는 이유는 카탈로그 항목이 바뀌거나 지워져도
+     * **과거 기록은 그대로여야** 하기 때문(xlsx 내보내기도 이름 기준으로 동작한다).
+     */
+    val exerciseId: Long? = null,
     val exerciseName: String,
+    /**
+     * 기록할 당시의 추적 방식을 복사해 둔다.
+     * 나중에 카탈로그에서 종목의 추적 방식을 고쳐도 과거 기록의 해석이 흔들리면 안 된다.
+     *
+     * `defaultValue`를 명시하는 이유: NOT NULL 컬럼을 ALTER TABLE로 추가하려면 SQLite가
+     * 기본값을 요구한다. 엔티티에도 같이 적어두지 않으면 마이그레이션 후 스키마 검증에서
+     * 기본값이 어긋난다.
+     */
+    @ColumnInfo(defaultValue = "WEIGHT_REPS")
+    val trackingType: TrackingType = TrackingType.WEIGHT_REPS,
     val defaultSetting: String = "",
     val memo: String = ""
 )
@@ -137,7 +206,11 @@ data class WorkoutSet(
     val setIndex: Int,
     val weightKg: Double,
     val reps: Int,
-    val done: Boolean
+    val done: Boolean,
+    /** 시간형 종목에서만 쓴다. 무게×횟수 종목에서는 null. */
+    val durationSec: Int? = null,
+    /** 유산소 종목에서만 쓴다(미터). */
+    val distanceM: Double? = null
 )
 
 /** 종목 + 그 종목의 세트들을 한 번에 읽기 위한 조회용 타입. */
@@ -175,7 +248,10 @@ data class RoutineExercise(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val routineId: Long,
     val orderIndex: Int,
+    val exerciseId: Long? = null,
     val exerciseName: String,
+    @ColumnInfo(defaultValue = "WEIGHT_REPS")
+    val trackingType: TrackingType = TrackingType.WEIGHT_REPS,
     val defaultSetting: String,
     val defaultWeight: Double,
     val defaultReps: Int

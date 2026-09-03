@@ -32,8 +32,95 @@ object SeedData {
      *
      * 이 번호가 DB에 기록된 것보다 크면 `Repository.applySeeds()`가 밀린 단계를 돌린다.
      * 올리지 않으면 새로 넣은 시드가 기존 사용자에게 영원히 안 들어간다.
+     *
+     * - 1: 기본 루틴 · 식단표 · 섭취 목표 (첫 설치에만)
+     * - 2: 종목 카탈로그 50개 + 기존 루틴·기록 연결
      */
-    const val VERSION = 1
+    const val VERSION = 2
+
+    /**
+     * 종목 카탈로그 시드.
+     *
+     * **앞의 27개는 [routines]에 쓰인 종목명과 글자 하나까지 같아야 한다.** 시드 2단계가
+     * 이름 완전일치로 기존 루틴·기록을 카탈로그에 연결하기 때문이다. 이름을 다듬고 싶으면
+     * [routines] 쪽도 같이 고쳐야 한다.
+     *
+     * slug는 기기 간 정체성이라 **한번 정하면 바꾸지 않는다.** 표시명은 바꿔도 되지만
+     * slug를 바꾸면 기존 기록의 연결이 끊긴다.
+     */
+    val exerciseCatalog = listOf(
+        // ── 기존 루틴에 쓰이는 종목 (이름 고정) ──
+        Seed("seated-shoulder-press-machine", "시티드 프레스 머신 (견갑 예열)", "어깨", "머신"),
+        Seed("standing-face-pull", "스탠딩 페이스풀", "어깨", "케이블"),
+        Seed("bench-press-machine", "벤치 프레스 머신 (다리 올림)", "가슴", "머신"),
+        Seed("incline-dumbbell-press", "인클라인 덤벨 프레스 (벤치 30도)", "가슴", "덤벨"),
+        Seed("pec-deck-fly-machine", "90도 플라이 머신", "가슴", "머신"),
+        Seed("cable-pushdown-ez-bar", "케이블 푸시다운 (이지바)", "팔", "케이블"),
+        Seed("cable-overhead-extension-rope", "케이블 오버헤드 익스텐션 (로프)", "팔", "케이블"),
+        Seed("suitcase-carry", "수트케이스 캐리", "코어", "덤벨", TrackingType.WEIGHT_TIME),
+        Seed("crunch", "크런치", "코어", "맨몸", TrackingType.REPS),
+        Seed("leg-raise", "레그레이즈", "코어", "맨몸", TrackingType.REPS),
+        Seed("seated-lat-pulldown-warmup", "시티드 랫풀다운 (견갑 예열)", "등", "머신"),
+        Seed("smith-machine-barbell-row", "스미스 머신 바벨 로우", "등", "머신"),
+        Seed("lat-pulldown", "랫 풀 다운", "등", "머신"),
+        Seed("arm-pulldown-ez-bar", "암 풀 다운 (이지바)", "등", "케이블"),
+        Seed("one-arm-dumbbell-row", "원암 덤벨 로우", "등", "덤벨"),
+        Seed("pallof-press", "팔로프 프레스", "코어", "케이블"),
+        Seed("seated-dumbbell-shoulder-press", "시티드 덤벨 숄더 프레스 (80도)", "어깨", "덤벨"),
+        Seed("dumbbell-lateral-raise", "덤벨 사이드 레터럴 레이즈", "어깨", "덤벨"),
+        Seed("incline-chest-supported-dumbbell-fly", "인클라인 체스트 서포트 덤벨 플라이", "등", "덤벨"),
+        Seed("captains-chair-knee-raise", "캡틴체어 니레이즈", "코어", "맨몸", TrackingType.REPS),
+        Seed("seated-leg-extension-warmup", "시티드 레그 익스텐션 (예열)", "하체", "머신"),
+        Seed("barbell-hip-thrust", "바벨 힙 쓰러스트", "하체", "바벨"),
+        Seed("leg-press", "레그 프레스", "하체", "머신"),
+        Seed("leg-extension", "레그 익스텐션", "하체", "머신"),
+        Seed("lying-leg-curl", "라잉 레그 컬", "하체", "머신"),
+        Seed("seated-leg-curl", "시티드 레그 컬", "하체", "머신"),
+        Seed("bulgarian-split-squat", "불가리안 스플릿 스쿼트", "하체", "덤벨"),
+
+        // ── 흔히 쓰는 종목 추가 ──
+        Seed("barbell-bench-press", "바벨 벤치프레스", "가슴", "바벨"),
+        Seed("incline-barbell-bench-press", "인클라인 바벨 벤치프레스", "가슴", "바벨"),
+        Seed("dips", "딥스", "가슴", "맨몸", TrackingType.REPS),
+        Seed("push-up", "푸시업", "가슴", "맨몸", TrackingType.REPS),
+        Seed("cable-crossover", "케이블 크로스오버", "가슴", "케이블"),
+        Seed("deadlift", "데드리프트", "등", "바벨"),
+        Seed("barbell-row", "바벨 로우", "등", "바벨"),
+        Seed("pull-up", "풀업", "등", "맨몸", TrackingType.REPS),
+        Seed("seated-cable-row", "시티드 케이블 로우", "등", "케이블"),
+        Seed("barbell-overhead-press", "바벨 오버헤드 프레스", "어깨", "바벨"),
+        Seed("arnold-press", "아놀드 프레스", "어깨", "덤벨"),
+        Seed("barbell-back-squat", "바벨 백스쿼트", "하체", "바벨"),
+        Seed("romanian-deadlift", "루마니안 데드리프트", "하체", "바벨"),
+        Seed("walking-lunge", "워킹 런지", "하체", "덤벨"),
+        Seed("standing-calf-raise", "스탠딩 카프 레이즈", "하체", "머신"),
+        Seed("barbell-curl", "바벨 컬", "팔", "바벨"),
+        Seed("dumbbell-curl", "덤벨 컬", "팔", "덤벨"),
+        Seed("hammer-curl", "해머 컬", "팔", "덤벨"),
+        Seed("lying-triceps-extension", "라잉 트라이셉스 익스텐션", "팔", "바벨"),
+        Seed("plank", "플랭크", "코어", "맨몸", TrackingType.TIME),
+        Seed("side-plank", "사이드 플랭크", "코어", "맨몸", TrackingType.TIME),
+        Seed("treadmill-run", "트레드밀 러닝", "유산소", "머신", TrackingType.DISTANCE_TIME),
+        Seed("stationary-bike", "사이클", "유산소", "머신", TrackingType.DISTANCE_TIME)
+    )
+
+    /** 카탈로그 시드 한 줄. 대부분이 무게×횟수라 그것만 기본값으로 둔다. */
+    data class Seed(
+        val slug: String,
+        val name: String,
+        val bodyPart: String,
+        val equipment: String,
+        val trackingType: TrackingType = TrackingType.WEIGHT_REPS
+    ) {
+        fun toEntity() = Exercise(
+            slug = slug,
+            name = name,
+            bodyPart = bodyPart,
+            equipment = equipment,
+            trackingType = trackingType,
+            source = ItemSource.SEED
+        )
+    }
 
     const val TARGET_KCAL = 2550.0
     const val TARGET_PROTEIN = 175.0

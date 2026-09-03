@@ -144,6 +144,96 @@ interface DietTargetDao {
 }
 
 @Dao
+interface ExerciseDao {
+
+    /** 종목 선택 목록용. 숨긴 건 빼고 보여준다. */
+    @Query("SELECT * FROM exercise WHERE hidden = 0 ORDER BY bodyPart, name")
+    fun observeVisible(): Flow<List<Exercise>>
+
+    /** 백업 내보내기용. 숨긴 것도 포함해야 복원했을 때 숨김 상태가 유지된다. */
+    @Query("SELECT * FROM exercise ORDER BY slug")
+    suspend fun getAll(): List<Exercise>
+
+    @Query("SELECT * FROM exercise WHERE slug = :slug LIMIT 1")
+    suspend fun findBySlug(slug: String): Exercise?
+
+    @Query("SELECT COUNT(*) FROM exercise")
+    suspend fun count(): Int
+
+    @Insert
+    suspend fun insert(exercise: Exercise): Long
+
+    @Update
+    suspend fun update(exercise: Exercise)
+
+    @Query("UPDATE exercise SET hidden = :hidden WHERE id = :id")
+    suspend fun setHidden(id: Long, hidden: Boolean)
+
+    @Query("DELETE FROM exercise")
+    suspend fun deleteAll()
+
+    /**
+     * 시드 종목을 slug 기준으로 넣거나 갱신한다.
+     *
+     * SQLite UPSERT(`ON CONFLICT ... DO UPDATE`)는 3.24+가 필요한데 minSdk 26은 3.19라
+     * 못 쓴다. 그래서 조회 후 분기한다.
+     *
+     * 지키는 것 두 가지:
+     * - 사용자가 직접 만든 항목(`source = USER`)은 slug가 겹쳐도 **덮어쓰지 않는다**
+     * - 사용자가 숨긴 상태([Exercise.hidden])는 갱신해도 **그대로 둔다**
+     */
+    @Transaction
+    suspend fun upsertSeed(seed: Exercise) {
+        val existing = findBySlug(seed.slug)
+        when {
+            existing == null -> insert(seed)
+            existing.source == ItemSource.SEED -> update(
+                existing.copy(
+                    name = seed.name,
+                    bodyPart = seed.bodyPart,
+                    equipment = seed.equipment,
+                    trackingType = seed.trackingType
+                )
+            )
+            // USER 항목이면 손대지 않는다.
+        }
+    }
+
+    /**
+     * 이름이 정확히 같은 카탈로그 종목에 기존 루틴을 연결한다.
+     *
+     * 시드 종목이 기존 시드 루틴의 이름을 그대로 쓰기 때문에 이 완전일치가 성립한다.
+     * 못 찾으면 `exerciseId`는 null로 남고 추적 방식도 원래 값을 유지한다.
+     */
+    @Query(
+        """
+        UPDATE routine_exercise SET
+            exerciseId = (SELECT e.id FROM exercise e WHERE e.name = routine_exercise.exerciseName),
+            trackingType = COALESCE(
+                (SELECT e.trackingType FROM exercise e WHERE e.name = routine_exercise.exerciseName),
+                trackingType
+            )
+        WHERE exerciseId IS NULL
+        """
+    )
+    suspend fun linkRoutineExercises()
+
+    /** 과거 운동 기록도 같은 방식으로 연결한다. */
+    @Query(
+        """
+        UPDATE workout_exercise SET
+            exerciseId = (SELECT e.id FROM exercise e WHERE e.name = workout_exercise.exerciseName),
+            trackingType = COALESCE(
+                (SELECT e.trackingType FROM exercise e WHERE e.name = workout_exercise.exerciseName),
+                trackingType
+            )
+        WHERE exerciseId IS NULL
+        """
+    )
+    suspend fun linkWorkoutExercises()
+}
+
+@Dao
 interface AppMetaDao {
     @Query("SELECT seedVersion FROM app_meta WHERE id = 1")
     suspend fun seedVersion(): Int?

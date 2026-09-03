@@ -4,8 +4,11 @@ import com.pkj.leanbulk.data.BodyRecord
 import com.pkj.leanbulk.data.DietTarget
 import com.pkj.leanbulk.data.DietTemplateMeal
 import com.pkj.leanbulk.data.DietTemplateWithMeals
+import com.pkj.leanbulk.data.Exercise
 import com.pkj.leanbulk.data.ExerciseWithSets
 import com.pkj.leanbulk.data.FoodItem
+import com.pkj.leanbulk.data.ItemSource
+import com.pkj.leanbulk.data.TrackingType
 import com.pkj.leanbulk.data.Macros
 import com.pkj.leanbulk.data.MealEntry
 import com.pkj.leanbulk.data.RoutineExercise
@@ -59,8 +62,23 @@ object SnapshotCodec {
         memo = memo
     )
 
-    /** 종목을 날짜별로 묶고 세트를 그 안에 중첩한다. */
-    fun List<ExerciseWithSets>.toWorkoutDayDtos(): List<WorkoutDayDto> =
+    fun Exercise.toDto() = ExerciseDto(
+        slug = slug,
+        name = name,
+        bodyPart = bodyPart,
+        equipment = equipment,
+        trackingType = trackingType.name,
+        source = source.name,
+        hidden = hidden
+    )
+
+    /**
+     * 종목을 날짜별로 묶고 세트를 그 안에 중첩한다.
+     *
+     * [slugById]는 카탈로그의 로컬 id를 slug로 바꾸기 위한 표다. id를 그대로 실으면
+     * 다른 기기에서 엉뚱한 종목을 가리키게 된다.
+     */
+    fun List<ExerciseWithSets>.toWorkoutDayDtos(slugById: Map<Long, String>): List<WorkoutDayDto> =
         groupBy { it.exercise.date }
             .toSortedMap()
             .map { (date, list) ->
@@ -70,22 +88,34 @@ object SnapshotCodec {
                         WorkoutExerciseDto(
                             routineName = ews.exercise.routineName,
                             orderIndex = ews.exercise.orderIndex,
+                            exerciseSlug = ews.exercise.exerciseId?.let { slugById[it] },
                             exerciseName = ews.exercise.exerciseName,
+                            trackingType = ews.exercise.trackingType.name,
                             defaultSetting = ews.exercise.defaultSetting,
                             memo = ews.exercise.memo,
                             sets = ews.sets.sortedBy { it.setIndex }.map {
-                                WorkoutSetDto(it.setIndex, it.weightKg, it.reps, it.done)
+                                WorkoutSetDto(
+                                    it.setIndex, it.weightKg, it.reps, it.done, it.durationSec, it.distanceM
+                                )
                             }
                         )
                     }
                 )
             }
 
-    fun RoutineWithExercises.toDto() = RoutineDto(
+    fun RoutineWithExercises.toDto(slugById: Map<Long, String>) = RoutineDto(
         name = routine.name,
         orderIndex = routine.orderIndex,
         exercises = exercises.sortedBy { it.orderIndex }.map {
-            RoutineExerciseDto(it.orderIndex, it.exerciseName, it.defaultSetting, it.defaultWeight, it.defaultReps)
+            RoutineExerciseDto(
+                orderIndex = it.orderIndex,
+                exerciseSlug = it.exerciseId?.let { id -> slugById[id] },
+                exerciseName = it.exerciseName,
+                trackingType = it.trackingType.name,
+                defaultSetting = it.defaultSetting,
+                defaultWeight = it.defaultWeight,
+                defaultReps = it.defaultReps
+            )
         }
     )
 
@@ -127,25 +157,54 @@ object SnapshotCodec {
         memo = memo
     )
 
-    /** 하루치 종목을 `WorkoutDao.replaceDay`가 받는 (종목, 세트들) 쌍으로 편다. */
-    fun WorkoutDayDto.toEntityPairs(): List<Pair<WorkoutExercise, List<WorkoutSet>>> =
+    /** 모르는 값이 와도 죽지 않게 기본값으로 떨어뜨린다(구버전이 신버전 파일을 읽는 경우). */
+    private fun trackingTypeOf(name: String): TrackingType =
+        runCatching { TrackingType.valueOf(name) }.getOrDefault(TrackingType.WEIGHT_REPS)
+
+    fun ExerciseDto.toEntity() = Exercise(
+        slug = slug,
+        name = name,
+        bodyPart = bodyPart,
+        equipment = equipment,
+        trackingType = trackingTypeOf(trackingType),
+        source = runCatching { ItemSource.valueOf(source) }.getOrDefault(ItemSource.USER),
+        hidden = hidden
+    )
+
+    /**
+     * 하루치 종목을 `WorkoutDao.replaceDay`가 받는 (종목, 세트들) 쌍으로 편다.
+     * [idBySlug]로 카탈로그 참조를 이 기기의 로컬 id로 되돌린다.
+     */
+    fun WorkoutDayDto.toEntityPairs(idBySlug: Map<String, Long>): List<Pair<WorkoutExercise, List<WorkoutSet>>> =
         exercises.map { ex ->
             WorkoutExercise(
                 date = date,
                 routineName = ex.routineName,
                 orderIndex = ex.orderIndex,
+                exerciseId = ex.exerciseSlug?.let { idBySlug[it] },
                 exerciseName = ex.exerciseName,
+                trackingType = trackingTypeOf(ex.trackingType),
                 defaultSetting = ex.defaultSetting,
                 memo = ex.memo
             ) to ex.sets.map {
-                WorkoutSet(exerciseId = 0, setIndex = it.setIndex, weightKg = it.weightKg, reps = it.reps, done = it.done)
+                WorkoutSet(
+                    exerciseId = 0,
+                    setIndex = it.setIndex,
+                    weightKg = it.weightKg,
+                    reps = it.reps,
+                    done = it.done,
+                    durationSec = it.durationSec,
+                    distanceM = it.distanceM
+                )
             }
         }
 
-    fun RoutineExerciseDto.toEntity(routineId: Long) = RoutineExercise(
+    fun RoutineExerciseDto.toEntity(routineId: Long, idBySlug: Map<String, Long>) = RoutineExercise(
         routineId = routineId,
         orderIndex = orderIndex,
+        exerciseId = exerciseSlug?.let { idBySlug[it] },
         exerciseName = exerciseName,
+        trackingType = trackingTypeOf(trackingType),
         defaultSetting = defaultSetting,
         defaultWeight = defaultWeight,
         defaultReps = defaultReps

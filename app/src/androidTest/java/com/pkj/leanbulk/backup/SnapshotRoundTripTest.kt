@@ -9,6 +9,9 @@ import com.pkj.leanbulk.data.BodyRecord
 import com.pkj.leanbulk.data.DietTarget
 import com.pkj.leanbulk.data.DietTemplate
 import com.pkj.leanbulk.data.DietTemplateMeal
+import com.pkj.leanbulk.data.Exercise
+import com.pkj.leanbulk.data.ItemSource
+import com.pkj.leanbulk.data.TrackingType
 import com.pkj.leanbulk.data.FoodItem
 import com.pkj.leanbulk.data.Macros
 import com.pkj.leanbulk.data.MealEntry
@@ -132,6 +135,27 @@ class SnapshotRoundTripTest {
 
     /** 왕복에서 깨지기 쉬운 값들을 골고루 심는다. */
     private suspend fun seedTrickyData() {
+        // 카탈로그를 먼저 넣어야 기록이 slug로 이어 붙는다.
+        val plankId = db.exerciseDao().insert(
+            Exercise(
+                slug = "plank", name = "플랭크", bodyPart = "코어", equipment = "맨몸",
+                trackingType = TrackingType.TIME, source = ItemSource.SEED
+            )
+        )
+        val runId = db.exerciseDao().insert(
+            Exercise(
+                slug = "treadmill-run", name = "트레드밀 러닝", bodyPart = "유산소", equipment = "머신",
+                trackingType = TrackingType.DISTANCE_TIME, source = ItemSource.SEED
+            )
+        )
+        // 사용자가 숨긴 항목도 백업에 실려야 복원했을 때 숨김이 유지된다.
+        db.exerciseDao().insert(
+            Exercise(
+                slug = "user-내가-만든-종목-1", name = "내가 만든 종목", bodyPart = "코어", equipment = "기타",
+                trackingType = TrackingType.REPS, source = ItemSource.USER, hidden = true
+            )
+        )
+
         val mealDao = db.mealDao()
         mealDao.insertAll(
             listOf(
@@ -165,11 +189,24 @@ class SnapshotRoundTripTest {
                     WorkoutSet(exerciseId = 0, setIndex = 0, weightKg = 60.0, reps = 10, done = true),
                     WorkoutSet(exerciseId = 0, setIndex = 1, weightKg = 62.5, reps = 8, done = false)
                 ),
+                // 시간형 — 무게·횟수가 아니라 durationSec으로 기록된다
                 WorkoutExercise(
                     date = "2026-08-30", routineName = "가슴/삼두", orderIndex = 1,
-                    exerciseName = "플랭크", defaultSetting = "", memo = ""
+                    exerciseId = plankId, exerciseName = "플랭크",
+                    trackingType = TrackingType.TIME, defaultSetting = "", memo = ""
                 ) to listOf(
-                    WorkoutSet(exerciseId = 0, setIndex = 0, weightKg = 0.0, reps = 60, done = true)
+                    WorkoutSet(exerciseId = 0, setIndex = 0, weightKg = 0.0, reps = 0, done = true, durationSec = 90)
+                ),
+                // 유산소 — 거리 + 시간
+                WorkoutExercise(
+                    date = "2026-08-30", routineName = "가슴/삼두", orderIndex = 2,
+                    exerciseId = runId, exerciseName = "트레드밀 러닝",
+                    trackingType = TrackingType.DISTANCE_TIME, defaultSetting = "", memo = ""
+                ) to listOf(
+                    WorkoutSet(
+                        exerciseId = 0, setIndex = 0, weightKg = 0.0, reps = 0, done = true,
+                        durationSec = 1_800, distanceM = 5_000.0
+                    )
                 )
             )
         )

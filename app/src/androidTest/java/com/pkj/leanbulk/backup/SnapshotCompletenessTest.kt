@@ -6,6 +6,7 @@ import com.pkj.leanbulk.data.BodyRecord
 import com.pkj.leanbulk.data.DietTarget
 import com.pkj.leanbulk.data.DietTemplate
 import com.pkj.leanbulk.data.DietTemplateMeal
+import com.pkj.leanbulk.data.Exercise
 import com.pkj.leanbulk.data.FoodItem
 import com.pkj.leanbulk.data.Macros
 import com.pkj.leanbulk.data.MealEntry
@@ -37,13 +38,17 @@ class SnapshotCompletenessTest {
         assertFields<MealEntry>("id", "date", "orderIndex", "slotName", "menuText", "macros", "eaten", "memo")
 
         assertFields<WorkoutExercise>(
-            "id", "date", "routineName", "orderIndex", "exerciseName", "defaultSetting", "memo"
+            "id", "date", "routineName", "orderIndex", "exerciseId", "exerciseName",
+            "trackingType", "defaultSetting", "memo"
         )
-        assertFields<WorkoutSet>("id", "exerciseId", "setIndex", "weightKg", "reps", "done")
+        assertFields<WorkoutSet>(
+            "id", "exerciseId", "setIndex", "weightKg", "reps", "done", "durationSec", "distanceM"
+        )
 
         assertFields<Routine>("id", "name", "orderIndex")
         assertFields<RoutineExercise>(
-            "id", "routineId", "orderIndex", "exerciseName", "defaultSetting", "defaultWeight", "defaultReps"
+            "id", "routineId", "orderIndex", "exerciseId", "exerciseName", "trackingType",
+            "defaultSetting", "defaultWeight", "defaultReps"
         )
 
         assertFields<DietTemplate>("id", "name", "orderIndex")
@@ -51,6 +56,9 @@ class SnapshotCompletenessTest {
 
         assertFields<FoodItem>("id", "name", "macros", "usedCount")
         assertFields<AppMeta>("id", "seedVersion")
+        assertFields<Exercise>(
+            "id", "slug", "name", "bodyPart", "equipment", "trackingType", "source", "hidden"
+        )
         assertFields<DietTarget>("id", "kcal", "protein", "carbs", "fat", "sugar")
         assertFields<BodyRecord>(
             "id", "date", "weightKg", "muscleMassKg", "fatMassKg", "fatPercent", "waistCm", "tool", "memo"

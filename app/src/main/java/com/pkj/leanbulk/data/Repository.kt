@@ -19,6 +19,7 @@ class Repository(private val db: AppDatabase) {
     private val dietTargetDao = db.dietTargetDao()
     private val bodyRecordDao = db.bodyRecordDao()
     private val appMetaDao = db.appMetaDao()
+    private val exerciseDao = db.exerciseDao()
 
     // ---------- 시드 ----------
 
@@ -44,13 +45,47 @@ class Repository(private val db: AppDatabase) {
             ensureTargetSeeded()
         }
 
-        // 카탈로그 시드(종목·음식)가 생기면 여기 붙는다. slug 기준 upsert라 여러 번 돌아도 안전하고,
-        // 사용자가 직접 추가한 항목(source = USER)은 건드리지 않는다.
+        if (applied < 2) {
+            // 종목 카탈로그. slug 기준이라 여러 번 돌아도 중복되지 않고,
+            // 사용자가 직접 추가한 항목(source = USER)과 숨김 상태는 건드리지 않는다.
+            SeedData.exerciseCatalog.forEach { exerciseDao.upsertSeed(it.toEntity()) }
+
+            // 이름이 같은 카탈로그 종목에 기존 루틴·기록을 이어 붙인다.
+            // 시드 종목이 기존 루틴의 이름을 그대로 쓰기 때문에 완전일치가 성립한다.
+            exerciseDao.linkRoutineExercises()
+            exerciseDao.linkWorkoutExercises()
+        }
 
         appMetaDao.upsert(AppMeta(seedVersion = SeedData.VERSION))
     }
 
     suspend fun seedVersion(): Int = appMetaDao.seedVersion() ?: 0
+
+    // ---------- 종목 카탈로그 ----------
+
+    fun observeExercises(): Flow<List<Exercise>> = exerciseDao.observeVisible()
+
+    /** 카탈로그에 없는 종목을 사용자가 직접 등록한다. 이후 검색 목록에 계속 남는다. */
+    suspend fun addUserExercise(
+        name: String,
+        bodyPart: String,
+        equipment: String,
+        trackingType: TrackingType
+    ): Exercise {
+        val entity = Exercise(
+            // 사용자 항목은 slug가 겹치지 않게 접두어를 붙인다. 나중에 같은 이름의 시드가
+            // 들어와도 사용자 것이 덮어써지지 않는다.
+            slug = "user-" + name.trim().lowercase().replace(Regex("\\s+"), "-") + "-" + System.currentTimeMillis(),
+            name = name.trim(),
+            bodyPart = bodyPart,
+            equipment = equipment,
+            trackingType = trackingType,
+            source = ItemSource.USER
+        )
+        return entity.copy(id = exerciseDao.insert(entity))
+    }
+
+    suspend fun hideExercise(id: Long) = exerciseDao.setHidden(id, true)
 
     // ---------- 식단 기록 ----------
 
@@ -173,12 +208,17 @@ class Repository(private val db: AppDatabase) {
 
     /** 지금 DB 전체를 스냅샷 하나로 뜬다. 백업 파일과 동기화가 같은 포맷을 쓴다. */
     suspend fun exportSnapshot(exportedAt: String): Snapshot = db.withTransaction {
+        val catalog = exerciseDao.getAll()
+        // 기록이 들고 있는 로컬 id를 기기 간에 통하는 slug로 바꿔서 내보낸다.
+        val slugById = catalog.associate { it.id to it.slug }
+
         Snapshot(
             exportedAt = exportedAt,
             seedVersion = seedVersion(),
+            exercises = catalog.map { it.toDto() },
             meals = mealDao.getAll().map { it.toDto() },
-            workoutDays = workoutDao.getAll().toWorkoutDayDtos(),
-            routines = routineDao.getAll().map { it.toDto() },
+            workoutDays = workoutDao.getAll().toWorkoutDayDtos(slugById),
+            routines = routineDao.getAll().map { it.toDto(slugById) },
             dietTemplates = dietTemplateDao.getAll().map { it.toDto() },
             foods = foodDao.getAll().map { it.toDto() },
             bodyRecords = bodyRecordDao.getAll().map { it.toDto() },
@@ -200,17 +240,23 @@ class Repository(private val db: AppDatabase) {
         dietTemplateDao.deleteAll()
         foodDao.deleteAll()
         bodyRecordDao.deleteAll()
+        exerciseDao.deleteAll()
+
+        // 카탈로그를 먼저 넣어야 기록·루틴이 slug로 이어 붙을 수 있다.
+        val idBySlug = snapshot.exercises.associate { dto ->
+            dto.slug to exerciseDao.insert(dto.toEntity())
+        }
 
         mealDao.insertAll(snapshot.meals.map { it.toEntity() })
 
         snapshot.workoutDays.forEach { day ->
-            workoutDao.replaceDay(day.date, day.toEntityPairs())
+            workoutDao.replaceDay(day.date, day.toEntityPairs(idBySlug))
         }
 
         snapshot.routines.forEach { dto ->
             val id = routineDao.insertRoutine(Routine(name = dto.name, orderIndex = dto.orderIndex))
             if (dto.exercises.isNotEmpty()) {
-                routineDao.insertExercises(dto.exercises.map { it.toEntity(id) })
+                routineDao.insertExercises(dto.exercises.map { it.toEntity(id, idBySlug) })
             }
         }
 

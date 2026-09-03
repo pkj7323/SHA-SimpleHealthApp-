@@ -24,6 +24,7 @@ data class Snapshot(
      * 새 시드가 영영 안 들어간다.
      */
     val seedVersion: Int = 0,
+    val exercises: List<ExerciseDto> = emptyList(),
     val meals: List<MealDto> = emptyList(),
     val workoutDays: List<WorkoutDayDto> = emptyList(),
     val routines: List<RoutineDto> = emptyList(),
@@ -68,11 +69,34 @@ data class WorkoutDayDto(
     val exercises: List<WorkoutExerciseDto> = emptyList()
 )
 
+/**
+ * 종목 카탈로그.
+ *
+ * 열거형을 문자열로 싣는 이유: 나중 버전이 추적 방식을 추가해도 **구버전 앱이 그 파일을
+ * 읽다가 죽지 않게** 하기 위함이다. 모르는 값은 기본값으로 떨어뜨린다.
+ */
+@Serializable
+data class ExerciseDto(
+    val slug: String,
+    val name: String,
+    val bodyPart: String,
+    val equipment: String,
+    val trackingType: String,
+    val source: String,
+    val hidden: Boolean = false
+)
+
 @Serializable
 data class WorkoutExerciseDto(
     val routineName: String,
     val orderIndex: Int,
+    /**
+     * 카탈로그 참조는 **로컬 id가 아니라 slug로** 싣는다. auto id는 기기마다 달라
+     * 다른 기기에서 읽으면 엉뚱한 종목을 가리킨다. 카탈로그에 없는 종목이면 null.
+     */
+    val exerciseSlug: String? = null,
     val exerciseName: String,
+    val trackingType: String = "WEIGHT_REPS",
     val defaultSetting: String,
     val memo: String,
     val sets: List<WorkoutSetDto> = emptyList()
@@ -83,7 +107,9 @@ data class WorkoutSetDto(
     val setIndex: Int,
     val weightKg: Double,
     val reps: Int,
-    val done: Boolean
+    val done: Boolean,
+    val durationSec: Int? = null,
+    val distanceM: Double? = null
 )
 
 @Serializable
@@ -96,7 +122,9 @@ data class RoutineDto(
 @Serializable
 data class RoutineExerciseDto(
     val orderIndex: Int,
+    val exerciseSlug: String? = null,
     val exerciseName: String,
+    val trackingType: String = "WEIGHT_REPS",
     val defaultSetting: String,
     val defaultWeight: Double,
     val defaultReps: Int
