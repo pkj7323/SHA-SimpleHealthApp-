@@ -11,6 +11,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -24,6 +28,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -31,11 +36,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pkj.leanbulk.data.BodyRecord
 import com.pkj.leanbulk.data.ExerciseWithSets
 import com.pkj.leanbulk.data.MealEntry
 import com.pkj.leanbulk.data.backup.BackupFiles
+import com.pkj.leanbulk.data.backup.DietTemplateDto
+import com.pkj.leanbulk.data.backup.ExerciseDto
+import com.pkj.leanbulk.data.backup.RoutineDto
 import com.pkj.leanbulk.data.backup.Snapshot
 import com.pkj.leanbulk.export.ShareUtils
 import com.pkj.leanbulk.export.XlsxExporter
@@ -161,6 +170,7 @@ private fun BackupSection(vm: MainViewModel) {
     var backupFile by remember { mutableStateOf<File?>(null) }
     var status by remember { mutableStateOf("") }
     var pendingImport by remember { mutableStateOf<Snapshot?>(null) }
+    var mergeFrom by remember { mutableStateOf<Snapshot?>(null) }
     var working by remember { mutableStateOf(false) }
 
     val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(BackupFiles.MIME)) { uri: Uri? ->
@@ -241,38 +251,174 @@ private fun BackupSection(vm: MainViewModel) {
     pendingImport?.let { snapshot ->
         AlertDialog(
             onDismissRequest = { pendingImport = null },
-            title = { Text("이 백업을 불러올까요?") },
+            title = { Text("이 파일을 어떻게 쓸까요?") },
             text = {
                 Column {
                     Text(snapshot.summarize())
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        "지금 기록은 모두 이 내용으로 바뀝니다. 바꾸기 직전 상태는 앱 안에 자동으로 남겨둡니다.",
+                        "골라서 가져오면 지금 기록은 그대로 두고 고른 것만 더합니다.\n" +
+                            "전체 덮어쓰기는 지금 기록을 모두 이 내용으로 바꿉니다(직전 상태는 앱 안에 남겨둡니다).",
                         style = MaterialTheme.typography.bodySmall
                     )
+                    Spacer(Modifier.height(12.dp))
+                    // 덮어쓰기는 되돌리기 번거로운 쪽이라 눈에 덜 띄는 자리에 둔다.
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            pendingImport = null
+                            scope.launch {
+                                working = true
+                                status = runCatching {
+                                    vm.applyImport(snapshot) { current ->
+                                        withContext(Dispatchers.IO) {
+                                            BackupFiles.saveRollbackPoint(context, current)
+                                        }
+                                    }
+                                }.fold(
+                                    onSuccess = { "전체 불러오기 완료" },
+                                    onFailure = { "불러오기 실패: ${it.message}" }
+                                )
+                                working = false
+                            }
+                        }
+                    ) { Text("전체 덮어쓰기") }
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    pendingImport = null
-                    scope.launch {
-                        working = true
-                        status = runCatching {
-                            vm.applyImport(snapshot) { current ->
-                                withContext(Dispatchers.IO) { BackupFiles.saveRollbackPoint(context, current) }
-                            }
-                        }.fold(
-                            onSuccess = { "불러오기 완료" },
-                            onFailure = { "불러오기 실패: ${it.message}" }
-                        )
-                        working = false
-                    }
-                }) { Text("불러오기") }
+                TextButton(onClick = { pendingImport = null; mergeFrom = snapshot }) {
+                    Text("골라서 가져오기")
+                }
             },
             dismissButton = {
                 TextButton(onClick = { pendingImport = null }) { Text("취소") }
             }
         )
+    }
+
+    mergeFrom?.let { snapshot ->
+        SelectiveMergeDialog(
+            snapshot = snapshot,
+            onMerge = { routines, templates, exercises ->
+                mergeFrom = null
+                scope.launch {
+                    working = true
+                    status = runCatching {
+                        vm.mergeFromSnapshot(snapshot.exercises, routines, templates, exercises)
+                    }.fold(
+                        onSuccess = { r ->
+                            "가져왔습니다 — 루틴 ${r.routines} · 식단표 ${r.dietTemplates}" +
+                                if (r.exercises > 0) " · 종목 ${r.exercises}" else ""
+                        },
+                        onFailure = { "가져오기 실패: ${it.message}" }
+                    )
+                    working = false
+                }
+            },
+            onDismiss = { mergeFrom = null }
+        )
+    }
+}
+
+/**
+ * 남의 백업 파일에서 원하는 것만 골라 가져온다.
+ *
+ * 일별 기록(식단·운동·신체)은 고를 수 없다 — 남의 하루 기록을 내 기록에 섞는 건 의미가
+ * 없고, 같은 날짜를 어떻게 합칠지는 레코드 단위 동기화 문제라 별개다. 그래서 **재사용할
+ * 수 있는 것**(루틴 · 식단표 · 종목)만 보여준다.
+ */
+@Composable
+private fun SelectiveMergeDialog(
+    snapshot: Snapshot,
+    onMerge: (List<RoutineDto>, List<DietTemplateDto>, List<ExerciseDto>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val routines = remember { mutableStateListOf<RoutineDto>() }
+    val templates = remember { mutableStateListOf<DietTemplateDto>() }
+    val exercises = remember { mutableStateListOf<ExerciseDto>() }
+
+    // 시드 종목은 내게도 이미 있으니 굳이 고르게 하지 않는다. 남이 직접 만든 것만 보여준다.
+    val userExercises = remember(snapshot) { snapshot.exercises.filter { it.source == "USER" } }
+    val nothingPicked = routines.isEmpty() && templates.isEmpty() && exercises.isEmpty()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("가져올 항목 고르기") },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                if (snapshot.routines.isNotEmpty()) {
+                    item { SectionLabel("루틴") }
+                    items(snapshot.routines, key = { it.name + it.orderIndex }) { dto ->
+                        CheckRow(
+                            checked = dto in routines,
+                            title = dto.name,
+                            subtitle = "종목 ${dto.exercises.size}개",
+                            onToggle = { if (dto in routines) routines.remove(dto) else routines.add(dto) }
+                        )
+                    }
+                }
+                if (snapshot.dietTemplates.isNotEmpty()) {
+                    item { SectionLabel("식단표") }
+                    items(snapshot.dietTemplates, key = { "t" + it.name + it.orderIndex }) { dto ->
+                        CheckRow(
+                            checked = dto in templates,
+                            title = dto.name,
+                            subtitle = "끼니 ${dto.meals.size}개",
+                            onToggle = { if (dto in templates) templates.remove(dto) else templates.add(dto) }
+                        )
+                    }
+                }
+                if (userExercises.isNotEmpty()) {
+                    item { SectionLabel("직접 만든 종목") }
+                    items(userExercises, key = { "e" + it.slug }) { dto ->
+                        CheckRow(
+                            checked = dto in exercises,
+                            title = dto.name,
+                            subtitle = "${dto.bodyPart} · ${dto.equipment}",
+                            onToggle = { if (dto in exercises) exercises.remove(dto) else exercises.add(dto) }
+                        )
+                    }
+                }
+                item {
+                    Text(
+                        "고른 루틴이 쓰는 종목은 자동으로 같이 들어옵니다. " +
+                            "이름이 겹치면 덮어쓰지 않고 뒤에 번호를 붙입니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 12.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !nothingPicked,
+                onClick = { onMerge(routines.toList(), templates.toList(), exercises.toList()) }
+            ) { Text("가져오기") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
+    )
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+    )
+}
+
+@Composable
+private fun CheckRow(checked: Boolean, title: String, subtitle: String, onToggle: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onToggle),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(checked = checked, onCheckedChange = { onToggle() })
+        Column(Modifier.weight(1f)) {
+            Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 

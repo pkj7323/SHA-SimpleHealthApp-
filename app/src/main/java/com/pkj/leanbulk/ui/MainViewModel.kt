@@ -14,6 +14,9 @@ import com.pkj.leanbulk.data.Repository
 import com.pkj.leanbulk.data.RoutineWithExercises
 import com.pkj.leanbulk.data.SeedData
 import com.pkj.leanbulk.data.TrackingType
+import com.pkj.leanbulk.data.backup.DietTemplateDto
+import com.pkj.leanbulk.data.backup.ExerciseDto
+import com.pkj.leanbulk.data.backup.RoutineDto
 import com.pkj.leanbulk.data.backup.Snapshot
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -447,6 +450,17 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
      * [saveRollbackPoint]가 실패하면 되돌릴 수단이 없는 채로 덮어쓰게 되므로,
      * 예외를 삼키지 않고 그대로 올려서 불러오기 자체를 중단시킨다.
      */
+    /**
+     * 백업 파일에서 고른 것만 더한다. 되돌림점을 안 남기는 이유는 **아무것도 지우지 않기**
+     * 때문이다 — 마음에 안 들면 들어온 루틴을 지우면 그만이다.
+     */
+    suspend fun mergeFromSnapshot(
+        catalog: List<ExerciseDto>,
+        routines: List<RoutineDto>,
+        dietTemplates: List<DietTemplateDto>,
+        exercises: List<ExerciseDto>
+    ): Repository.MergeResult = repository.mergeFromSnapshot(catalog, routines, dietTemplates, exercises)
+
     suspend fun applyImport(snapshot: Snapshot, saveRollbackPoint: suspend (Snapshot) -> Unit) {
         workoutSaveJob?.cancel()
         dietSaveJob?.cancel()

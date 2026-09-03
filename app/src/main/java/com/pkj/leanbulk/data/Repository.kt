@@ -1,6 +1,9 @@
 package com.pkj.leanbulk.data
 
 import androidx.room.withTransaction
+import com.pkj.leanbulk.data.backup.DietTemplateDto
+import com.pkj.leanbulk.data.backup.ExerciseDto
+import com.pkj.leanbulk.data.backup.RoutineDto
 import com.pkj.leanbulk.data.backup.Snapshot
 import com.pkj.leanbulk.data.backup.SnapshotCodec
 import com.pkj.leanbulk.data.backup.SnapshotCodec.toDto
@@ -278,5 +281,97 @@ class Repository(private val db: AppDatabase) {
 
         // 시드 버전도 같이 넘어와야, 옛 백업을 불러왔을 때 다음 실행에서 밀린 시드가 채워진다.
         appMetaDao.upsert(AppMeta(seedVersion = snapshot.seedVersion))
+    }
+
+    /** 선택적 병합 결과. 뭐가 몇 개 들어왔는지 알려주려고 센다. */
+    data class MergeResult(
+        val routines: Int = 0,
+        val dietTemplates: Int = 0,
+        val exercises: Int = 0,
+        val foods: Int = 0
+    )
+
+    /**
+     * 백업 파일에서 **고른 것만 지금 기록에 더한다.** 전체 교체(`importSnapshot`)와 달리
+     * 기존 데이터를 지우지 않는다 — 남의 루틴 하나를 베껴오려고 내 기록을 날릴 수는 없다.
+     *
+     * 두 가지를 신경 쓴다:
+     *
+     * 1. **루틴은 종목 카탈로그를 slug로 참조한다.** 남의 루틴이 내게 없는 종목을 쓰고
+     *    있으면 그 종목도 같이 들여와야 이름만 남고 추적 방식이 날아가지 않는다.
+     *    딸려 들어오는 종목은 내 시드가 아니므로 `USER`로 넣는다.
+     * 2. **이름이 겹치면 덮어쓰지 않고 " (2)"를 붙인다.** 어느 쪽이 맞는지는 사용자만
+     *    알기 때문에, 둘 다 남겨두고 고르게 하는 게 안전하다.
+     *
+     * 일별 기록(식단·운동·신체)은 병합하지 않는다. 남의 하루 기록을 내 기록에 섞는 건
+     * 의미가 없고, 같은 날짜를 어떻게 합칠지는 레코드 단위 동기화 문제라 별개다.
+     */
+    suspend fun mergeFromSnapshot(
+        catalog: List<ExerciseDto>,
+        routines: List<RoutineDto>,
+        dietTemplates: List<DietTemplateDto>,
+        exercises: List<ExerciseDto>
+    ): MergeResult = db.withTransaction {
+        val catalogBySlug = catalog.associateBy { it.slug }
+
+        // 직접 고른 종목 + 고른 루틴이 쓰는 종목을 합쳐서 필요한 것만 들여온다.
+        val neededSlugs = buildSet {
+            exercises.forEach { add(it.slug) }
+            routines.forEach { r -> r.exercises.forEach { it.exerciseSlug?.let(::add) } }
+        }
+
+        var addedExercises = 0
+        val idBySlug = mutableMapOf<String, Long>()
+        neededSlugs.forEach { slug ->
+            val mine = exerciseDao.findBySlug(slug)
+            if (mine != null) {
+                // 이미 있으면 내 것을 쓴다. 남의 파일이 내 카탈로그를 고치게 두지 않는다.
+                idBySlug[slug] = mine.id
+            } else {
+                val dto = catalogBySlug[slug] ?: return@forEach
+                idBySlug[slug] = exerciseDao.insert(dto.toEntity().copy(source = ItemSource.USER))
+                addedExercises++
+            }
+        }
+
+        val takenRoutineNames = routineDao.getAll().map { it.routine.name }.toMutableSet()
+        var addedRoutines = 0
+        routines.forEach { dto ->
+            val name = uniqueName(dto.name, takenRoutineNames)
+            takenRoutineNames += name
+            val id = routineDao.insertRoutine(Routine(name = name, orderIndex = routineDao.nextOrderIndex()))
+            if (dto.exercises.isNotEmpty()) {
+                routineDao.insertExercises(dto.exercises.map { it.toEntity(id, idBySlug) })
+            }
+            addedRoutines++
+        }
+
+        val takenTemplateNames = dietTemplateDao.getAll().map { it.template.name }.toMutableSet()
+        var addedTemplates = 0
+        dietTemplates.forEach { dto ->
+            val name = uniqueName(dto.name, takenTemplateNames)
+            takenTemplateNames += name
+            val id = dietTemplateDao.insertTemplate(
+                DietTemplate(name = name, orderIndex = dietTemplateDao.nextOrderIndex())
+            )
+            if (dto.meals.isNotEmpty()) {
+                dietTemplateDao.insertMeals(dto.meals.map { it.toEntity(id) })
+            }
+            addedTemplates++
+        }
+
+        MergeResult(
+            routines = addedRoutines,
+            dietTemplates = addedTemplates,
+            exercises = addedExercises
+        )
+    }
+
+    /** 이름이 겹치면 뒤에 번호를 붙인다. 덮어쓰는 것보다 둘 다 남기는 쪽이 안전하다. */
+    private fun uniqueName(base: String, taken: Set<String>): String {
+        if (base !in taken) return base
+        var n = 2
+        while ("$base ($n)" in taken) n++
+        return "$base ($n)"
     }
 }
