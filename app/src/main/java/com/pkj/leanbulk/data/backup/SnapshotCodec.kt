@@ -127,7 +127,15 @@ object SnapshotCodec {
         }
     )
 
-    fun FoodItem.toDto() = FoodDto(name, macros.toDto(), usedCount)
+    fun FoodItem.toDto() = FoodDto(
+        slug = slug,
+        name = name,
+        category = category,
+        macros = macros.toDto(),
+        usedCount = usedCount,
+        source = source.name,
+        hidden = hidden
+    )
 
     fun BodyRecord.toDto() = BodyRecordDto(
         date = date,
@@ -218,7 +226,16 @@ object SnapshotCodec {
         macros = macros.toEntity()
     )
 
-    fun FoodDto.toEntity() = FoodItem(name = name, macros = macros.toEntity(), usedCount = usedCount)
+    fun FoodDto.toEntity() = FoodItem(
+        // 옛 백업엔 slug가 없다. 비워 두면 유니크 인덱스에 걸리므로 그 자리에서 만들어 붙인다.
+        slug = slug.ifBlank { "user-restored-${name.hashCode()}" },
+        name = name,
+        category = category,
+        macros = macros.toEntity(),
+        usedCount = usedCount,
+        source = runCatching { ItemSource.valueOf(source) }.getOrDefault(ItemSource.USER),
+        hidden = hidden
+    )
 
     fun BodyRecordDto.toEntity() = BodyRecord(
         date = date,

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.horizontalScroll
@@ -17,8 +18,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
@@ -204,7 +207,7 @@ fun TodayDietScreen(vm: MainViewModel) {
         FoodPickerDialog(
             foods = foods,
             onPick = { vm.applyFood(index, it); foodPickerFor = null },
-            onDelete = vm::deleteFood,
+            onHide = vm::hideFood,
             onDismiss = { foodPickerFor = null }
         )
     }
@@ -285,7 +288,7 @@ private fun MealCard(
             OutlinedButton(
                 onClick = onPickFood,
                 modifier = Modifier.padding(top = 8.dp)
-            ) { Text("내 음식에서 불러오기") }
+            ) { Text("음식 목록에서 고르기") }
 
             Text(
                 "영양정보 (모르면 비워두세요)",
@@ -393,19 +396,31 @@ private fun DietTemplatePickerDialog(
     }
 }
 
+/**
+ * 음식 카탈로그에서 골라 끼니를 채운다.
+ *
+ * 예전에는 "한 번 입력한 음식"만 쌓여서 처음 쓸 때는 목록이 비어 있었다. 이제 시드로
+ * 깔린 음식이 처음부터 있고, 쓰면서 쌓인 것과 한 목록에서 같이 검색된다.
+ * 종목 선택 다이얼로그와 같은 구조다.
+ */
 @Composable
 private fun FoodPickerDialog(
     foods: List<FoodItem>,
     onPick: (FoodItem) -> Unit,
-    onDelete: (Long) -> Unit,
+    onHide: (Long) -> Unit,
     onDismiss: () -> Unit
 ) {
     var query by remember { mutableStateOf("") }
-    val filtered = foods.filter { it.name.contains(query, ignoreCase = true) }
+    var category by remember { mutableStateOf<String?>(null) }
+
+    val categories = remember(foods) { foods.map { it.category }.distinct().sorted() }
+    val filtered = foods.filter {
+        (category == null || it.category == category) && it.name.contains(query, ignoreCase = true)
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("내 음식 목록") },
+        title = { Text("음식 선택") },
         text = {
             Column {
                 OutlinedTextField(
@@ -415,14 +430,34 @@ private fun FoodPickerDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                if (foods.isEmpty()) {
+
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    item {
+                        FilterChip(
+                            selected = category == null,
+                            onClick = { category = null },
+                            label = { Text("전체") }
+                        )
+                    }
+                    items(categories) { item ->
+                        FilterChip(
+                            selected = category == item,
+                            onClick = { category = if (category == item) null else item },
+                            label = { Text(item) }
+                        )
+                    }
+                }
+
+                if (filtered.isEmpty()) {
                     Text(
-                        "아직 저장된 음식이 없습니다. 영양정보를 채워서 기록하면 여기에 쌓입니다.",
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 8.dp)
+                        "찾는 음식이 없습니다. 메뉴와 영양정보를 직접 적으면 다음부터 여기에 쌓입니다.",
+                        style = MaterialTheme.typography.bodySmall
                     )
                 }
-                LazyColumn(Modifier.heightIn(max = 320.dp).padding(top = 8.dp)) {
+                LazyColumn(Modifier.heightIn(max = 320.dp)) {
                     items(filtered, key = { it.id }) { food ->
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             TextButton(onClick = { onPick(food) }, modifier = Modifier.weight(1f)) {
@@ -431,8 +466,9 @@ private fun FoodPickerDialog(
                                     Text(formatMacros(food.macros), style = MaterialTheme.typography.bodySmall)
                                 }
                             }
-                            IconButton(onClick = { onDelete(food.id) }) {
-                                Icon(Icons.Filled.Delete, contentDescription = "음식 삭제")
+                            // 지우지 않고 숨긴다 — 시드 음식은 지워도 다음 갱신 때 slug로 되살아난다.
+                            IconButton(onClick = { onHide(food.id) }) {
+                                Icon(Icons.Filled.VisibilityOff, contentDescription = "목록에서 숨기기")
                             }
                         }
                     }

@@ -93,7 +93,8 @@ interface DietTemplateDao {
 
 @Dao
 interface FoodDao {
-    @Query("SELECT * FROM food_item ORDER BY usedCount DESC, name")
+    /** 음식 선택 목록. 숨긴 건 빼고, 자주 쓴 것부터 보여준다. */
+    @Query("SELECT * FROM food_item WHERE hidden = 0 ORDER BY usedCount DESC, name")
     fun observeAll(): Flow<List<FoodItem>>
 
     /** 백업 내보내기용 일회성 조회. */
@@ -103,8 +104,34 @@ interface FoodDao {
     @Query("SELECT * FROM food_item WHERE name = :name LIMIT 1")
     suspend fun findByName(name: String): FoodItem?
 
+    @Query("SELECT * FROM food_item WHERE slug = :slug LIMIT 1")
+    suspend fun findBySlug(slug: String): FoodItem?
+
+    @Query("UPDATE food_item SET hidden = :hidden WHERE id = :id")
+    suspend fun setHidden(id: Long, hidden: Boolean)
+
     @Query("DELETE FROM food_item")
     suspend fun deleteAll()
+
+    /**
+     * 시드 음식을 slug 기준으로 넣거나 갱신한다. [ExerciseDao.upsertSeed]와 같은 규칙이다.
+     *
+     * 음식엔 함정이 하나 더 있다 — **이름도 유니크**라서, 사용자가 이미 같은 이름으로
+     * 쌓아둔 음식이 있으면 slug가 달라도 삽입이 실패한다. 그런 경우는 사용자 것을
+     * 그대로 두고 시드를 건너뛴다(직접 적어둔 영양정보가 더 정확할 수 있다).
+     */
+    @Transaction
+    suspend fun upsertSeed(seed: FoodItem) {
+        val bySlug = findBySlug(seed.slug)
+        if (bySlug != null) {
+            if (bySlug.source == ItemSource.SEED) {
+                update(bySlug.copy(name = seed.name, category = seed.category, macros = seed.macros))
+            }
+            return
+        }
+        if (findByName(seed.name) != null) return
+        insert(seed)
+    }
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(item: FoodItem)
@@ -115,12 +142,22 @@ interface FoodDao {
     @Query("DELETE FROM food_item WHERE id = :id")
     suspend fun delete(id: Long)
 
-    /** 같은 이름이 있으면 매크로를 갱신하고 사용 횟수를 올린다. */
+    /**
+     * 같은 이름이 있으면 매크로를 갱신하고 사용 횟수를 올린다.
+     * 없으면 새로 쌓는다 — 이때 slug를 붙여줘야 유니크 인덱스에 걸리지 않는다.
+     */
     @Transaction
     suspend fun remember(name: String, macros: Macros) {
         val existing = findByName(name)
         if (existing == null) {
-            insert(FoodItem(name = name, macros = macros))
+            insert(
+                FoodItem(
+                    slug = "user-${System.currentTimeMillis()}-${name.hashCode()}",
+                    name = name,
+                    macros = macros,
+                    source = ItemSource.USER
+                )
+            )
         } else {
             update(existing.copy(macros = macros, usedCount = existing.usedCount + 1))
         }

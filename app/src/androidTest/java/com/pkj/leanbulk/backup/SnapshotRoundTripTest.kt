@@ -236,8 +236,25 @@ class SnapshotRoundTripTest {
             )
         )
 
-        db.foodDao().insert(FoodItem(name = "닭가슴살 100g", macros = Macros(kcal = 165.0, protein = 31.0), usedCount = 42))
-        db.foodDao().insert(FoodItem(name = "물", macros = Macros(0.0, 0.0, 0.0, 0.0, 0.0), usedCount = 1))
+        db.foodDao().insert(
+            FoodItem(
+                slug = "chicken-breast-100g", name = "닭가슴살 100g", category = "육류",
+                macros = Macros(kcal = 165.0, protein = 31.0), usedCount = 42, source = ItemSource.SEED
+            )
+        )
+        // 숨긴 시드 음식도 백업에 실려야 복원했을 때 다시 튀어나오지 않는다.
+        db.foodDao().insert(
+            FoodItem(
+                slug = "ramen-1pack", name = "라면 1봉", category = "간편식",
+                macros = Macros(500.0, 10.0, 79.0, 16.0, 4.0), usedCount = 0,
+                source = ItemSource.SEED, hidden = true
+            )
+        )
+        db.foodDao().insert(
+            FoodItem(
+                slug = "user-water", name = "물", macros = Macros(0.0, 0.0, 0.0, 0.0, 0.0), usedCount = 1
+            )
+        )
 
         db.bodyRecordDao().upsert(
             BodyRecord(

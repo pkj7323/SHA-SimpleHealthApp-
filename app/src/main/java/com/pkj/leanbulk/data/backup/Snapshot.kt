@@ -147,9 +147,13 @@ data class DietTemplateMealDto(
 
 @Serializable
 data class FoodDto(
+    val slug: String = "",
     val name: String,
+    val category: String = "기타",
     val macros: MacrosDto,
-    val usedCount: Int
+    val usedCount: Int,
+    val source: String = "USER",
+    val hidden: Boolean = false
 )
 
 @Serializable

@@ -65,6 +65,14 @@ class MigrationTest {
             db.execSQL(
                 "INSERT INTO workout_set (exerciseId, setIndex, weightKg, reps, done) VALUES (1, 0, 62.5, 8, 1)"
             )
+            // 음식은 카탈로그가 생기기 전부터 쓰면서 쌓이던 테이블이라, 기존 행이 있는 채로
+            // slug를 채우고 유니크 인덱스를 걸어야 한다. 그게 6→7의 위험한 부분이다.
+            db.execSQL(
+                "INSERT INTO food_item (name, kcal, protein, usedCount) VALUES ('내가 적은 음식', 123.0, 45.0, 7)"
+            )
+            db.execSQL(
+                "INSERT INTO food_item (name, kcal, protein, usedCount) VALUES ('내가 적은 음식 2', 200.0, 10.0, 3)"
+            )
         }
 
         // 4 → 현재 버전까지 사슬을 전부 탄다.
@@ -91,6 +99,24 @@ class MigrationTest {
                 assertEquals(62.5, c.getDouble(0), 0.001)
                 assertEquals(8, c.getInt(1))
                 assertTrue("새로 추가된 시간 컬럼은 비어 있어야 한다", c.isNull(2))
+            }
+
+            // 기존 음식 행에 slug가 채워지고, 서로 겹치지 않아야 유니크 인덱스가 선다.
+            db.query("SELECT name, slug, source, kcal FROM food_item ORDER BY name").use { c ->
+                val slugs = mutableSetOf<String>()
+                var rows = 0
+                while (c.moveToNext()) {
+                    rows++
+                    val slug = c.getString(1)
+                    assertTrue("slug가 비어 있다: ${c.getString(0)}", slug.isNotBlank())
+                    assertTrue("slug가 중복됐다: $slug", slugs.add(slug))
+                    assertEquals("기존 음식은 사용자 것으로 남아야 한다", "USER", c.getString(2))
+                }
+                assertEquals("음식이 사라졌다", 2, rows)
+            }
+            db.query("SELECT kcal FROM food_item WHERE name = '내가 적은 음식'").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("직접 적은 영양정보가 바뀌었다", 123.0, c.getDouble(0), 0.001)
             }
         }
     }

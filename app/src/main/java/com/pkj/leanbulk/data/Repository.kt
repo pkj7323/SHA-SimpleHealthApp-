@@ -56,6 +56,11 @@ class Repository(private val db: AppDatabase) {
             exerciseDao.linkWorkoutExercises()
         }
 
+        if (applied < 3) {
+            // 음식 카탈로그. 종목과 같은 규칙 — slug 기준이고 사용자 것은 안 건드린다.
+            SeedData.foodCatalog.forEach { foodDao.upsertSeed(it.toEntity()) }
+        }
+
         appMetaDao.upsert(AppMeta(seedVersion = SeedData.VERSION))
     }
 
@@ -138,7 +143,7 @@ class Repository(private val db: AppDatabase) {
 
     fun observeFoods(): Flow<List<FoodItem>> = foodDao.observeAll()
 
-    suspend fun deleteFood(id: Long) = foodDao.delete(id)
+    suspend fun hideFood(id: Long) = foodDao.setHidden(id, true)
 
     // ---------- 섭취 목표 ----------
 

@@ -70,13 +70,32 @@ data class DietTemplateWithMeals(
     val meals: List<DietTemplateMeal>
 )
 
-/** 한 번 입력한 음식은 여기 쌓여서 다음에 검색해 불러올 수 있다. */
-@Entity(tableName = "food_item", indices = [Index(value = ["name"], unique = true)])
+/**
+ * 음식 카탈로그. 시드로 깔린 것과 사용자가 쓰면서 쌓인 것이 한 테이블에 같이 산다.
+ *
+ * 종목([Exercise])과 같은 구조지만 **다른 점이 하나 있다** — 이 테이블은 카탈로그가
+ * 생기기 전부터 "한 번 입력한 음식이 쌓이는" 용도로 쓰이고 있었다. 그래서 기존 행은
+ * 마이그레이션에서 `source = USER`로 채워지고 slug도 그때 만들어 붙인다.
+ *
+ * 이름에 제공량이 들어간다("닭가슴살 100g"). 수량을 따로 두지 않는 이유는 이 앱의
+ * 한 끼니가 음식 하나가 아니라 자유 텍스트("현미밥 180g + 닭가슴살 150g + 나물반찬")
+ * 이기 때문이다. 음식 목록은 그 칸을 채워주는 도우미지 끼니의 구성 요소가 아니다.
+ */
+@Entity(
+    tableName = "food_item",
+    indices = [Index(value = ["name"], unique = true), Index(value = ["slug"], unique = true)]
+)
 data class FoodItem(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(defaultValue = "") val slug: String = "",
     val name: String,
+    /** 밥·곡물 / 육류 / 생선·해산물 / 계란·유제품 / 두부·콩 / 채소 / 과일 / 견과 / 간편식 / 음료 */
+    @ColumnInfo(defaultValue = "기타") val category: String = "기타",
     @androidx.room.Embedded val macros: Macros,
-    val usedCount: Int = 1
+    val usedCount: Int = 1,
+    @ColumnInfo(defaultValue = "USER") val source: ItemSource = ItemSource.USER,
+    /** 지우지 않고 숨긴다 — 지우면 다음 시드 갱신 때 slug로 되살아난다. */
+    @ColumnInfo(defaultValue = "0") val hidden: Boolean = false
 )
 
 /** 하루 섭취 목표. 행이 하나뿐인 설정 테이블. */

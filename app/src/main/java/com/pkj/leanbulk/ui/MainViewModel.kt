@@ -344,7 +344,7 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
         scheduleDietSave()
     }
 
-    /** 내 음식 목록에서 고른 값을 해당 끼니에 채워 넣는다. */
+    /** 음식 카탈로그에서 고른 값을 해당 끼니에 채워 넣는다. */
     fun applyFood(index: Int, food: FoodItem) {
         updateMeal(index) { it.copy(menuText = food.name, macros = food.macros) }
     }
@@ -354,8 +354,9 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
         updateMeal(index) { meal -> meal.estimate?.let { meal.copy(macros = it) } ?: meal }
     }
 
-    fun deleteFood(id: Long) {
-        viewModelScope.launch { repository.deleteFood(id) }
+    /** 목록에서 치운다. 시드 음식은 지우면 다음 갱신 때 되살아나므로 숨김으로 처리한다. */
+    fun hideFood(id: Long) {
+        viewModelScope.launch { repository.hideFood(id) }
     }
 
     private fun scheduleDietSave() {

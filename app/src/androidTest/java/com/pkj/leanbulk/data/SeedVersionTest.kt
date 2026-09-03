@@ -158,6 +158,52 @@ class SeedVersionTest {
         assertEquals(ItemSource.USER, found.source)
     }
 
+    // ===================== 음식 카탈로그 (시드 3단계) =====================
+
+    @Test
+    fun 음식_카탈로그가_깔린다() = runBlocking {
+        repo.applySeeds()
+
+        val foods = repo.observeFoods().first()
+        assertEquals("음식 카탈로그 수", SeedData.foodCatalog.size, foods.size)
+        assertTrue(
+            "분류가 여러 개여야 필터가 의미 있다",
+            foods.map { it.category }.distinct().size > 3
+        )
+    }
+
+    /**
+     * 음식은 종목과 달리 **이름도 유니크**하다. 카탈로그가 생기기 전부터 쓰면서 쌓인
+     * 사용자 음식과 이름이 겹치면 시드를 건너뛰어야 한다 — 직접 적어둔 영양정보가
+     * 더 정확할 수 있고, 무엇보다 삽입이 실패하면 안 된다.
+     */
+    @Test
+    fun 이름이_겹치면_사용자_음식을_지킨다() = runBlocking {
+        // 시드가 깔리기 전에 사용자가 같은 이름으로 먼저 쌓아둔 상황
+        db.foodDao().remember("닭가슴살 100g", Macros(kcal = 999.0, protein = 99.0))
+
+        repo.applySeeds()
+
+        val mine = repo.observeFoods().first().first { it.name == "닭가슴살 100g" }
+        assertEquals("사용자가 적은 값이 시드로 덮어써졌다", 999.0, mine.macros.kcal!!, 0.0)
+        assertEquals(ItemSource.USER, mine.source)
+    }
+
+    @Test
+    fun 숨긴_음식은_시드를_다시_돌려도_숨은_채로_있다() = runBlocking {
+        repo.applySeeds()
+        val target = repo.observeFoods().first().first()
+        repo.hideFood(target.id)
+
+        db.appMetaDao().upsert(AppMeta(seedVersion = 0))
+        repo.applySeeds()
+
+        assertTrue(
+            "숨긴 음식이 시드 갱신으로 되살아났다",
+            repo.observeFoods().first().none { it.id == target.id }
+        )
+    }
+
     /**
      * 반대 방향 — 옛 백업(시드 버전이 낮음)을 불러오면 밀린 시드가 채워져야 한다.
      */

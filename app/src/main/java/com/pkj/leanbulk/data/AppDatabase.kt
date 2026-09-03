@@ -53,6 +53,24 @@ internal val MIGRATION_5_6 = Migration(5, 6) { db ->
     )
 }
 
+/**
+ * 6 → 7: 음식도 카탈로그가 된다 (slug · 분류 · source · 숨김).
+ *
+ * 종목 때와 달리 `food_item`에는 **이미 사용자 데이터가 들어 있다.** 카탈로그가 생기기
+ * 전부터 "한 번 입력한 음식이 쌓이는" 용도로 쓰였기 때문이다. 그래서 기존 행을
+ * `source = USER`로 두고 slug를 만들어 채운 뒤에야 유니크 인덱스를 걸 수 있다.
+ */
+internal val MIGRATION_6_7 = Migration(6, 7) { db ->
+    db.execSQL("ALTER TABLE `food_item` ADD COLUMN `slug` TEXT NOT NULL DEFAULT ''")
+    db.execSQL("ALTER TABLE `food_item` ADD COLUMN `category` TEXT NOT NULL DEFAULT '기타'")
+    db.execSQL("ALTER TABLE `food_item` ADD COLUMN `source` TEXT NOT NULL DEFAULT 'USER'")
+    db.execSQL("ALTER TABLE `food_item` ADD COLUMN `hidden` INTEGER NOT NULL DEFAULT 0")
+
+    // 빈 slug가 여러 개면 유니크 인덱스를 못 건다. 인덱스보다 먼저 채운다.
+    db.execSQL("UPDATE `food_item` SET `slug` = 'user-' || `id` WHERE `slug` = ''")
+    db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_food_item_slug` ON `food_item` (`slug`)")
+}
+
 @Database(
     entities = [
         MealEntry::class,
@@ -68,7 +86,7 @@ internal val MIGRATION_5_6 = Migration(5, 6) { db ->
         AppMeta::class,
         Exercise::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -96,10 +114,10 @@ abstract class AppDatabase : RoomDatabase() {
          * 그래서 버전을 올릴 때는 반드시 [MIGRATIONS]에 이주 코드를 하나 추가해야 한다.
          * 빠뜨리면 앱이 열리다 죽으므로 조용히 넘어가지 않는다.
          */
-        internal val MIGRATIONS = arrayOf(MIGRATION_4_5, MIGRATION_5_6)
+        internal val MIGRATIONS = arrayOf(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
 
         /** 마이그레이션 테스트가 참조한다. `@Database`의 version과 항상 같아야 한다. */
-        internal const val VERSION = 6
+        internal const val VERSION = 7
 
         fun get(context: Context): AppDatabase =
             instance ?: synchronized(this) {

@@ -35,8 +35,9 @@ object SeedData {
      *
      * - 1: 기본 루틴 · 식단표 · 섭취 목표 (첫 설치에만)
      * - 2: 종목 카탈로그 50개 + 기존 루틴·기록 연결
+     * - 3: 음식 카탈로그 60여 개
      */
-    const val VERSION = 2
+    const val VERSION = 3
 
     /**
      * 종목 카탈로그 시드.
@@ -103,6 +104,119 @@ object SeedData {
         Seed("treadmill-run", "트레드밀 러닝", "유산소", "머신", TrackingType.DISTANCE_TIME),
         Seed("stationary-bike", "사이클", "유산소", "머신", TrackingType.DISTANCE_TIME)
     )
+
+    /**
+     * 음식 카탈로그 시드.
+     *
+     * 영양정보는 **일반적인 참고값**이다. 제품·조리법에 따라 달라지므로, 정확한 값을
+     * 아는 음식은 사용자가 고른 뒤 직접 고치면 된다(고친 값이 다음부터 쌓인다).
+     *
+     * 이름에 제공량을 함께 적는다("닭가슴살 100g"). 이 앱의 한 끼니는 음식 하나가 아니라
+     * 자유 텍스트라서 수량을 따로 두지 않는다 — `FoodItem` 주석 참고.
+     */
+    val foodCatalog = listOf(
+        // ── 밥 · 곡물 ──
+        FoodSeed("rice-brown-200g", "현미밥 200g", "밥·곡물", 300.0, 6.0, 66.0, 2.5, 0.0),
+        FoodSeed("rice-white-200g", "흰쌀밥 200g", "밥·곡물", 310.0, 5.6, 69.0, 0.6, 0.0),
+        FoodSeed("rice-multigrain-200g", "잡곡밥 200g", "밥·곡물", 300.0, 7.0, 64.0, 2.0, 0.0),
+        FoodSeed("sweet-potato-100g", "고구마 100g", "밥·곡물", 130.0, 1.5, 31.0, 0.2, 9.0),
+        FoodSeed("potato-100g", "감자 100g", "밥·곡물", 77.0, 2.0, 17.0, 0.1, 0.8),
+        FoodSeed("oatmeal-40g", "오트밀 40g(건조)", "밥·곡물", 150.0, 5.0, 27.0, 3.0, 0.4),
+        FoodSeed("white-bread-1slice", "식빵 1장", "밥·곡물", 90.0, 3.0, 17.0, 1.0, 1.5),
+        FoodSeed("whole-wheat-bread-1slice", "통밀빵 1장", "밥·곡물", 85.0, 4.0, 15.0, 1.2, 1.5),
+
+        // ── 육류 ──
+        FoodSeed("chicken-breast-100g", "닭가슴살 100g", "육류", 165.0, 31.0, 0.0, 3.6, 0.0),
+        FoodSeed("chicken-tender-100g", "닭안심 100g", "육류", 110.0, 24.0, 0.0, 1.5, 0.0),
+        FoodSeed("chicken-thigh-100g", "닭다리살 100g", "육류", 210.0, 26.0, 0.0, 11.0, 0.0),
+        FoodSeed("beef-tenderloin-100g", "소고기 안심 100g", "육류", 220.0, 21.0, 0.0, 15.0, 0.0),
+        FoodSeed("beef-shank-100g", "소고기 사태 100g", "육류", 140.0, 21.0, 0.0, 6.0, 0.0),
+        FoodSeed("pork-tenderloin-100g", "돼지고기 안심 100g", "육류", 145.0, 22.0, 0.0, 6.0, 0.0),
+        FoodSeed("pork-neck-100g", "돼지고기 목살 100g", "육류", 240.0, 18.0, 0.0, 19.0, 0.0),
+        FoodSeed("pork-belly-100g", "삼겹살 100g", "육류", 330.0, 17.0, 0.0, 29.0, 0.0),
+
+        // ── 생선 · 해산물 ──
+        FoodSeed("salmon-100g", "연어 100g", "생선·해산물", 200.0, 20.0, 0.0, 13.0, 0.0),
+        FoodSeed("canned-tuna-100g", "참치캔(기름 뺀) 100g", "생선·해산물", 110.0, 25.0, 0.0, 1.0, 0.0),
+        FoodSeed("mackerel-100g", "고등어 100g", "생선·해산물", 190.0, 20.0, 0.0, 12.0, 0.0),
+        FoodSeed("cod-100g", "흰살생선(대구) 100g", "생선·해산물", 82.0, 18.0, 0.0, 0.7, 0.0),
+        FoodSeed("shrimp-100g", "새우 100g", "생선·해산물", 99.0, 24.0, 0.0, 0.3, 0.0),
+        FoodSeed("squid-100g", "오징어 100g", "생선·해산물", 92.0, 16.0, 3.0, 1.4, 0.0),
+
+        // ── 계란 · 유제품 ──
+        FoodSeed("egg-1", "계란 1개", "계란·유제품", 72.0, 6.3, 0.4, 4.8, 0.2),
+        FoodSeed("egg-white-1", "계란흰자 1개", "계란·유제품", 17.0, 3.6, 0.2, 0.1, 0.2),
+        FoodSeed("milk-200ml", "우유 200ml", "계란·유제품", 125.0, 6.6, 9.6, 6.8, 9.6),
+        FoodSeed("low-fat-milk-200ml", "저지방우유 200ml", "계란·유제품", 90.0, 6.8, 10.0, 2.0, 10.0),
+        FoodSeed("greek-yogurt-100g", "그릭요거트 100g", "계란·유제품", 97.0, 9.0, 4.0, 5.0, 4.0),
+        FoodSeed("plain-yogurt-100g", "플레인요거트 100g", "계란·유제품", 61.0, 3.5, 4.7, 3.3, 4.7),
+        FoodSeed("cheddar-1slice", "체다치즈 1장", "계란·유제품", 65.0, 4.0, 1.0, 5.0, 0.5),
+        FoodSeed("cottage-cheese-100g", "코티지치즈 100g", "계란·유제품", 98.0, 11.0, 3.4, 4.3, 2.7),
+
+        // ── 두부 · 콩 ──
+        FoodSeed("tofu-100g", "두부 100g", "두부·콩", 84.0, 8.0, 2.0, 5.0, 0.6),
+        FoodSeed("soft-tofu-100g", "순두부 100g", "두부·콩", 47.0, 5.0, 2.0, 2.5, 0.5),
+        FoodSeed("natto-1pack", "낫토 1팩", "두부·콩", 100.0, 8.0, 6.0, 5.0, 1.0),
+        FoodSeed("chickpea-100g", "병아리콩 100g(삶은)", "두부·콩", 164.0, 9.0, 27.0, 2.6, 4.8),
+        FoodSeed("black-bean-100g", "검은콩 100g(삶은)", "두부·콩", 132.0, 9.0, 24.0, 0.5, 0.3),
+
+        // ── 채소 ──
+        FoodSeed("broccoli-100g", "브로콜리 100g", "채소", 34.0, 2.8, 7.0, 0.4, 1.7),
+        FoodSeed("spinach-100g", "시금치 100g", "채소", 23.0, 2.9, 3.6, 0.4, 0.4),
+        FoodSeed("cabbage-100g", "양배추 100g", "채소", 25.0, 1.3, 6.0, 0.1, 3.2),
+        FoodSeed("tomato-1", "토마토 1개", "채소", 27.0, 1.3, 5.8, 0.3, 4.0),
+        FoodSeed("cherry-tomato-100g", "방울토마토 100g", "채소", 18.0, 0.9, 3.9, 0.2, 2.6),
+        FoodSeed("cucumber-100g", "오이 100g", "채소", 15.0, 0.7, 3.6, 0.1, 1.7),
+        FoodSeed("paprika-100g", "파프리카 100g", "채소", 31.0, 1.0, 6.0, 0.3, 4.2),
+        FoodSeed("mushroom-100g", "양송이버섯 100g", "채소", 22.0, 3.1, 3.3, 0.3, 2.0),
+        FoodSeed("kimchi-100g", "김치 100g", "채소", 32.0, 1.7, 6.0, 0.5, 1.8),
+
+        // ── 과일 ──
+        FoodSeed("banana-1", "바나나 1개", "과일", 105.0, 1.3, 27.0, 0.4, 14.0),
+        FoodSeed("apple-1", "사과 1개", "과일", 104.0, 0.5, 28.0, 0.3, 21.0),
+        FoodSeed("blueberry-100g", "블루베리 100g", "과일", 57.0, 0.7, 14.0, 0.3, 10.0),
+        FoodSeed("strawberry-100g", "딸기 100g", "과일", 32.0, 0.7, 7.7, 0.3, 4.9),
+        FoodSeed("orange-1", "오렌지 1개", "과일", 70.0, 1.3, 17.0, 0.2, 13.0),
+
+        // ── 견과 ──
+        FoodSeed("almond-15g", "아몬드 15g", "견과", 87.0, 3.2, 3.3, 7.5, 0.6),
+        FoodSeed("walnut-15g", "호두 15g", "견과", 98.0, 2.3, 2.0, 9.8, 0.4),
+        FoodSeed("peanut-butter-15g", "땅콩버터 15g", "견과", 94.0, 4.0, 3.2, 8.0, 1.4),
+
+        // ── 간편식 ──
+        FoodSeed("chicken-sausage-100g", "닭가슴살 소시지 100g", "간편식", 110.0, 17.0, 6.0, 2.0, 1.0),
+        FoodSeed("gimbap-1roll", "김밥 1줄", "간편식", 400.0, 10.0, 68.0, 9.0, 3.0),
+        FoodSeed("tuna-gimbap-1roll", "참치김밥 1줄", "간편식", 480.0, 18.0, 70.0, 13.0, 4.0),
+        FoodSeed("ramen-1pack", "라면 1봉", "간편식", 500.0, 10.0, 79.0, 16.0, 4.0),
+        FoodSeed("boiled-egg-1", "삶은계란 1개", "간편식", 72.0, 6.3, 0.4, 4.8, 0.2),
+
+        // ── 음료 ──
+        FoodSeed("protein-shake-1scoop", "프로틴쉐이크 1스쿱", "음료", 120.0, 24.0, 3.0, 1.5, 1.0),
+        FoodSeed("americano", "아메리카노(무가당)", "음료", 5.0, 0.3, 1.0, 0.0, 0.0),
+        FoodSeed("black-coffee", "블랙커피", "음료", 2.0, 0.1, 0.0, 0.0, 0.0),
+        FoodSeed("sports-drink-500ml", "이온음료 500ml", "음료", 125.0, 0.0, 31.0, 0.0, 31.0)
+    )
+
+    /** 음식 카탈로그 시드 한 줄. */
+    data class FoodSeed(
+        val slug: String,
+        val name: String,
+        val category: String,
+        val kcal: Double,
+        val protein: Double,
+        val carbs: Double,
+        val fat: Double,
+        val sugar: Double
+    ) {
+        fun toEntity() = FoodItem(
+            slug = slug,
+            name = name,
+            category = category,
+            macros = Macros(kcal, protein, carbs, fat, sugar),
+            usedCount = 0,
+            source = ItemSource.SEED
+        )
+    }
 
     /** 카탈로그 시드 한 줄. 대부분이 무게×횟수라 그것만 기본값으로 둔다. */
     data class Seed(
