@@ -17,6 +17,7 @@ import com.pkj.leanbulk.data.Routine
 import com.pkj.leanbulk.data.RoutineExercise
 import com.pkj.leanbulk.data.WorkoutExercise
 import com.pkj.leanbulk.data.WorkoutSet
+import com.pkj.leanbulk.data.backup.BackupFiles
 import com.pkj.leanbulk.data.backup.SnapshotCodec
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -100,6 +101,26 @@ class SnapshotRoundTripTest {
         val restored = SnapshotCodec.gunzip(ByteArrayInputStream(SnapshotCodec.gzip(snapshot)))
 
         assertEquals(SnapshotCodec.toJson(snapshot), SnapshotCodec.toJson(restored))
+    }
+
+    /**
+     * 실제 파일로 굽고 되읽는 경로까지 확인한다. 앱에서 백업 버튼이 하는 일과 같다.
+     *
+     * `runBlocking<Unit>`으로 반환형을 못 박아야 한다 — 마지막 줄이 `delete()`라 그냥 두면
+     * 반환형이 Boolean으로 추론되고, JUnit이 "테스트는 void여야 한다"며 **클래스 전체**를
+     * 로드하지 못해 이 파일의 테스트가 전부 안 돌게 된다.
+     */
+    @Test
+    fun 파일로_굽고_되읽어도_같다() = runBlocking<Unit> {
+        seedTrickyData()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+
+        val snapshot = repo.exportSnapshot(fixedTime)
+        val file = BackupFiles.writeForSharing(context, snapshot)
+        val restored = file.inputStream().use { SnapshotCodec.gunzip(it) }
+
+        assertEquals(SnapshotCodec.toJson(snapshot), SnapshotCodec.toJson(restored))
+        file.delete()
     }
 
     @Test

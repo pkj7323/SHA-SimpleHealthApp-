@@ -210,9 +210,16 @@ JSON을 받아서 DB에 넣을 때 주의할 점.
 
 **하나의 트랜잭션 안에서 전체 교체.** 중간에 실패하면 통째로 롤백돼야 한다. 반쯤 덮어쓴 상태가 제일 나쁘다.
 
-**적용 후에는 화면을 다시 만든다.** Room의 Flow는 변경을 알아서 알리지만, 모든 테이블을 한꺼번에 갈아엎은 뒤의 상태는 예측하기 어렵고, `MainViewModel`이 들고 있는 편집 중 draft(`_workoutDraft`, `_dietDraft`)는 **DB와 무관한 메모리 상태라 자동으로 안 바뀐다.** 옛 draft가 남아 있다가 다음 자동저장 때 방금 받은 데이터를 덮어쓰는 사고가 난다.
+**편집 중이던 draft를 반드시 처리해야 한다.** Room의 Flow는 변경을 알아서 알리지만, `MainViewModel`이 들고 있는 draft(`_workoutDraft`, `_dietDraft`)는 **DB와 무관한 메모리 상태라 자동으로 안 바뀐다.** 옛 draft가 남아 있으면 불러오기가 끝난 0.7초 뒤 자동저장이 돌면서 **방금 불러온 기록을 덮어쓴다.**
 
-→ 적용 직후 Activity를 `recreate()` 해서 ViewModel과 draft를 새로 만든다. 개인 앱에서 이 정도 투박함은 충분히 감당할 만하고, 훨씬 안전하다.
+→ 순서를 이렇게 묶는다 (`MainViewModel.applyImport`):
+
+1. **대기 중인 자동저장 작업을 취소**한다 (flush가 아니라 cancel — 옛 draft를 쓰면 안 되므로)
+2. 현재 상태를 되돌림점으로 저장한다
+3. 스냅샷으로 교체한다
+4. `loadWorkoutDraft` / `loadDietDraft`로 draft를 **DB에서 다시 읽는다**
+
+> **`Activity.recreate()`로는 해결되지 않는다.** 처음엔 그렇게 잡았다가 구현하며 알았는데, `recreate()`는 설정 변경과 같은 취급이라 **ViewModel이 그대로 살아남는다.** 화면만 다시 그려지고 draft는 옛날 것 그대로다.
 
 **적용은 앱이 앞에 있을 때만.** 백그라운드에서 몰래 DB를 갈아끼우면 위의 draft 문제가 그대로 터진다. 받기는 항상 포그라운드 진입 시점에만 한다.
 
@@ -223,10 +230,13 @@ JSON을 받아서 DB에 넣을 때 주의할 점.
 동기화 자체보다 **선행 작업이 대부분**이다.
 
 - [x] **JSON 직렬화 + 왕복 테스트** — `data/backup/`(`Snapshot`, `SnapshotCodec`), `Repository.exportSnapshot()` / `importSnapshot()`, 계측 테스트 5개 통과
-- [ ] **백업/복원 UI** — 내보내기 탭에 JSON 섹션, 가져오기 확인 다이얼로그, 적용 후 `recreate()`
+- [x] **백업/복원 UI** — 내보내기 탭의 "백업 · 복원" 섹션(`ExportScreen.BackupSection`), 확인 다이얼로그, 적용 전 되돌림점 자동 저장(`BackupFiles.saveRollbackPoint`)
 - [ ] **0단계 — 파괴적 마이그레이션 제거** (`fallbackToDestructiveMigration()` 삭제 + 스키마 export)
   - WAL 끄기는 **불필요해졌으므로 하지 않는다**
 - [ ] **JSON 선택적 병합** (로드맵 3번 나머지 — "남의 루틴 중 이것만 가져오기")
+
+여기까지가 동기화 없이도 필요한 부분이고, 아래부터는 **후순위**다 — 카탈로그 계층·운동 목적 설정·AI 챗을 다 만든 뒤에 착수한다.
+
 - [ ] **드롭박스 개발자 앱 등록** — 사용자가 콘솔에서 직접 해야 함
 - [ ] **드롭박스 인증 + 업/다운로드**
 - [ ] **동기화 상태 기계 + 충돌 UI**

@@ -11,10 +11,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -29,9 +35,13 @@ import androidx.compose.ui.unit.dp
 import com.pkj.leanbulk.data.BodyRecord
 import com.pkj.leanbulk.data.ExerciseWithSets
 import com.pkj.leanbulk.data.MealEntry
+import com.pkj.leanbulk.data.backup.BackupFiles
+import com.pkj.leanbulk.data.backup.Snapshot
 import com.pkj.leanbulk.export.ShareUtils
 import com.pkj.leanbulk.export.XlsxExporter
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.LocalDate
 
@@ -63,7 +73,9 @@ fun ExportScreen(vm: MainViewModel) {
         }
     }
 
-    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Text("엑셀 내보내기", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
         Text("기존 운동일지.xlsx와 동일한 시트 구성(운동일지/종목목록/신체기록/식단체크/사용법)으로 내보냅니다.")
         Spacer(Modifier.height(16.dp))
 
@@ -126,7 +138,149 @@ fun ExportScreen(vm: MainViewModel) {
 
         Spacer(Modifier.height(16.dp))
         Text(status)
+
+        Spacer(Modifier.height(24.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(24.dp))
+
+        BackupSection(vm)
     }
+}
+
+/**
+ * 백업/복원. 엑셀이 "사람이 보는 용도"라면 이쪽은 **기록을 그대로 옮기는 용도**다.
+ * 엑셀은 셀 위치가 조금만 어긋나도 깨지고 되돌릴 정보가 부족해서 불러오기를 지원하지 않는다.
+ */
+@Composable
+private fun BackupSection(vm: MainViewModel) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var backupFile by remember { mutableStateOf<File?>(null) }
+    var status by remember { mutableStateOf("") }
+    var pendingImport by remember { mutableStateOf<Snapshot?>(null) }
+    var working by remember { mutableStateOf(false) }
+
+    val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(BackupFiles.MIME)) { uri: Uri? ->
+        val file = backupFile
+        if (uri != null && file != null) {
+            ShareUtils.copyTo(context, file, uri)
+            status = "저장 완료"
+        }
+    }
+
+    // gzip을 application/gzip으로 안 보여주는 파일 관리자가 있어서 필터를 걸지 않는다.
+    val openLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            status = runCatching { withContext(Dispatchers.IO) { BackupFiles.read(context, uri) } }
+                .onSuccess { pendingImport = it }
+                .fold(
+                    onSuccess = { "" },
+                    onFailure = { "읽을 수 없는 파일입니다. 이 앱이 만든 백업 파일인지 확인해 주세요." }
+                )
+        }
+    }
+
+    Text("백업 · 복원", style = MaterialTheme.typography.titleMedium)
+    Spacer(Modifier.height(8.dp))
+    Text("모든 기록을 파일 하나로 저장하고 되돌립니다. 폰을 바꾸거나 기록을 옮길 때 씁니다.")
+    Spacer(Modifier.height(16.dp))
+
+    Button(
+        modifier = Modifier.fillMaxWidth(),
+        enabled = !working,
+        onClick = {
+            scope.launch {
+                working = true
+                status = runCatching {
+                    val snapshot = vm.buildSnapshot()
+                    withContext(Dispatchers.IO) { BackupFiles.writeForSharing(context, snapshot) }
+                }.fold(
+                    onSuccess = { backupFile = it; "생성 완료: ${it.name}" },
+                    onFailure = { "백업 생성 실패: ${it.message}" }
+                )
+                working = false
+            }
+        }
+    ) { Text("백업 파일 만들기") }
+
+    Spacer(Modifier.height(8.dp))
+
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(
+            modifier = Modifier.weight(1f),
+            enabled = backupFile != null,
+            onClick = {
+                backupFile?.let {
+                    context.startActivity(ShareUtils.shareIntentFor(context, it, BackupFiles.MIME, "백업 공유하기"))
+                }
+            }
+        ) { Text("공유하기") }
+
+        Button(
+            modifier = Modifier.weight(1f),
+            enabled = backupFile != null,
+            onClick = { backupFile?.let { saveLauncher.launch(it.name) } }
+        ) { Text("파일로 저장") }
+    }
+
+    Spacer(Modifier.height(16.dp))
+
+    OutlinedButton(
+        modifier = Modifier.fillMaxWidth(),
+        enabled = !working,
+        onClick = { openLauncher.launch(arrayOf("*/*")) }
+    ) { Text("백업 파일 불러오기") }
+
+    Spacer(Modifier.height(8.dp))
+    Text(status)
+
+    pendingImport?.let { snapshot ->
+        AlertDialog(
+            onDismissRequest = { pendingImport = null },
+            title = { Text("이 백업을 불러올까요?") },
+            text = {
+                Column {
+                    Text(snapshot.summarize())
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "지금 기록은 모두 이 내용으로 바뀝니다. 바꾸기 직전 상태는 앱 안에 자동으로 남겨둡니다.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingImport = null
+                    scope.launch {
+                        working = true
+                        status = runCatching {
+                            vm.applyImport(snapshot) { current ->
+                                withContext(Dispatchers.IO) { BackupFiles.saveRollbackPoint(context, current) }
+                            }
+                        }.fold(
+                            onSuccess = { "불러오기 완료" },
+                            onFailure = { "불러오기 실패: ${it.message}" }
+                        )
+                        working = false
+                    }
+                }) { Text("불러오기") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingImport = null }) { Text("취소") }
+            }
+        )
+    }
+}
+
+/** 확인 다이얼로그에 보여줄 요약. 뭘 덮어쓰는지 알고 누르게 한다. */
+private fun Snapshot.summarize(): String = buildString {
+    appendLine("만든 시각: ${exportedAt.replace('T', ' ').take(16)}")
+    appendLine("식단  ${meals.map { it.date }.distinct().size}일 · ${meals.size}끼니")
+    appendLine("운동  ${workoutDays.size}일 · ${workoutDays.sumOf { it.exercises.size }}종목")
+    appendLine("신체기록  ${bodyRecords.size}건")
+    append("루틴 ${routines.size} · 식단표 ${dietTemplates.size} · 음식 ${foods.size}")
 }
 
 @Composable

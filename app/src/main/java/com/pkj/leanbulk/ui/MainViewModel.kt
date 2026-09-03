@@ -12,6 +12,7 @@ import com.pkj.leanbulk.data.MealEntry
 import com.pkj.leanbulk.data.Repository
 import com.pkj.leanbulk.data.RoutineWithExercises
 import com.pkj.leanbulk.data.SeedData
+import com.pkj.leanbulk.data.backup.Snapshot
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -399,5 +400,39 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
 
     fun consumeToast() {
         _toast.value = null
+    }
+
+    // ===================== 백업 / 복원 =====================
+
+    /** 지금 DB 전체를 스냅샷으로 뜬다. 파일로 굽는 건 화면 쪽에서 한다. */
+    suspend fun buildSnapshot(): Snapshot =
+        repository.exportSnapshot(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
+
+    /**
+     * 스냅샷으로 기록을 통째로 바꾼다.
+     *
+     * 순서가 중요해서 한 함수로 묶었다. 특히 **대기 중인 자동 저장을 먼저 버려야 한다** —
+     * 편집 중이던 draft는 DB와 무관한 메모리 상태라, 그냥 두면 불러오기가 끝난 0.7초 뒤에
+     * 옛 draft가 저장되면서 방금 불러온 기록을 덮어쓴다.
+     *
+     * [saveRollbackPoint]가 실패하면 되돌릴 수단이 없는 채로 덮어쓰게 되므로,
+     * 예외를 삼키지 않고 그대로 올려서 불러오기 자체를 중단시킨다.
+     */
+    suspend fun applyImport(snapshot: Snapshot, saveRollbackPoint: suspend (Snapshot) -> Unit) {
+        workoutSaveJob?.cancel()
+        dietSaveJob?.cancel()
+        pendingWorkout = null
+        pendingDiet = null
+
+        saveRollbackPoint(buildSnapshot())
+        repository.importSnapshot(snapshot)
+
+        // 화면이 들고 있는 draft를 새 데이터로 다시 채운다.
+        // (Activity.recreate()로는 안 된다 — ViewModel이 설정 변경처럼 살아남아 draft가 그대로다)
+        loadWorkoutDraft(_workoutDate.value)
+        loadDietDraft(_dietDate.value)
+        _savedAt.value = null
+
+        _toast.value = "불러오기 완료"
     }
 }
