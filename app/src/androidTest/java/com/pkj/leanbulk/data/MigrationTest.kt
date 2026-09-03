@@ -46,6 +46,32 @@ class MigrationTest {
         ).close()
     }
 
+    /**
+     * 마이그레이션의 존재 이유가 이것이다 — **기존 기록이 살아남아야 한다.**
+     * 스키마 검증만 통과하고 데이터가 날아가면 파괴적 마이그레이션과 다를 게 없다.
+     */
+    @Test
+    fun 마이그레이션이_기존_기록을_지우지_않는다() {
+        helper.createDatabase(TEST_DB, 4).use { db ->
+            db.execSQL("INSERT INTO routine (name, orderIndex) VALUES ('내가 만든 루틴', 0)")
+            db.execSQL(
+                "INSERT INTO body_record (date, weightKg, fatPercent, tool, memo) " +
+                    "VALUES ('2026-08-28', 74.3, 15.07, '인바디', '')"
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, 5, true, *AppDatabase.MIGRATIONS).use { db ->
+            db.query("SELECT name FROM routine").use { c ->
+                assertTrue("루틴이 사라졌다", c.moveToFirst())
+                assertEquals("내가 만든 루틴", c.getString(0))
+            }
+            db.query("SELECT weightKg FROM body_record").use { c ->
+                assertTrue("신체 기록이 사라졌다", c.moveToFirst())
+                assertEquals(74.3, c.getDouble(0), 0.001)
+            }
+        }
+    }
+
     @Test
     fun 선언한_버전과_실제_DB_버전이_같다() {
         val db = helper.createDatabase(TEST_DB, AppDatabase.VERSION)

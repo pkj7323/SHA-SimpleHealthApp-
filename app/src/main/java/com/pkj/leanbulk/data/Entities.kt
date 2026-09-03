@@ -89,6 +89,20 @@ data class DietTarget(
     val sugar: Double
 )
 
+/**
+ * 앱이 이 DB에 대해 기억해둬야 하는 값들. 항상 한 줄(id=1)만 있다.
+ *
+ * **일부러 DB에 둔다.** 동기화 메타데이터(마지막 rev 등)는 DataStore에 두는데
+ * 이건 반대다 — [seedVersion]은 "이 기록 뭉치에 어느 버전의 시드까지 반영됐나"라서
+ * **데이터를 따라다녀야** 한다. 남의 백업을 불러오면 그쪽 시드 버전이 같이 들어오고,
+ * 그래야 부족한 시드가 다시 채워진다.
+ */
+@Entity(tableName = "app_meta")
+data class AppMeta(
+    @PrimaryKey val id: Int = 1,
+    val seedVersion: Int = 0
+)
+
 /** 하루 운동에 포함된 종목 하나. 세트는 workout_set 테이블에 따로 저장된다. */
 @Entity(
     tableName = "workout_exercise",

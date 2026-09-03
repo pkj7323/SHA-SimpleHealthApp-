@@ -106,11 +106,7 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
         repository.observeTarget().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     init {
-        viewModelScope.launch {
-            repository.ensureRoutinesSeeded()
-            repository.ensureDietTemplatesSeeded()
-            repository.ensureTargetSeeded()
-        }
+        viewModelScope.launch { repository.applySeeds() }
         loadWorkoutDraft(_today.value)
         loadDietDraft(_today.value)
         startMidnightWatcher()

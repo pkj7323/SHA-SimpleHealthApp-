@@ -144,6 +144,15 @@ interface DietTargetDao {
 }
 
 @Dao
+interface AppMetaDao {
+    @Query("SELECT seedVersion FROM app_meta WHERE id = 1")
+    suspend fun seedVersion(): Int?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(meta: AppMeta)
+}
+
+@Dao
 interface WorkoutDao {
 
     @Transaction

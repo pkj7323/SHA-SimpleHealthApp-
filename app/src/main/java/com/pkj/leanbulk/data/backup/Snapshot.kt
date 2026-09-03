@@ -16,6 +16,14 @@ import kotlinx.serialization.Serializable
 data class Snapshot(
     val formatVersion: Int = CURRENT_FORMAT_VERSION,
     val exportedAt: String,
+    /**
+     * 이 기록 뭉치에 어느 버전의 시드까지 반영됐는지. 불러오기로 같이 넘어간다.
+     *
+     * 옛날 백업(시드 v1)을 지금 앱(시드 v3)에서 불러오면 이 값이 1로 돌아가고,
+     * 다음 실행 때 2·3단계 시드가 채워진다. 안 들고 다니면 불러온 데이터에
+     * 새 시드가 영영 안 들어간다.
+     */
+    val seedVersion: Int = 0,
     val meals: List<MealDto> = emptyList(),
     val workoutDays: List<WorkoutDayDto> = emptyList(),
     val routines: List<RoutineDto> = emptyList(),

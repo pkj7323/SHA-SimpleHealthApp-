@@ -1,6 +1,7 @@
 package com.pkj.leanbulk.backup
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.pkj.leanbulk.data.AppMeta
 import com.pkj.leanbulk.data.BodyRecord
 import com.pkj.leanbulk.data.DietTarget
 import com.pkj.leanbulk.data.DietTemplate
@@ -49,6 +50,7 @@ class SnapshotCompletenessTest {
         assertFields<DietTemplateMeal>("id", "templateId", "orderIndex", "slotName", "menuText", "macros")
 
         assertFields<FoodItem>("id", "name", "macros", "usedCount")
+        assertFields<AppMeta>("id", "seedVersion")
         assertFields<DietTarget>("id", "kcal", "protein", "carbs", "fat", "sugar")
         assertFields<BodyRecord>(
             "id", "date", "weightKg", "muscleMassKg", "fatMassKg", "fatPercent", "waistCm", "tool", "memo"

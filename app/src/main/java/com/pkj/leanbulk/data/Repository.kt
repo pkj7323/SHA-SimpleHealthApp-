@@ -18,6 +18,39 @@ class Repository(private val db: AppDatabase) {
     private val foodDao = db.foodDao()
     private val dietTargetDao = db.dietTargetDao()
     private val bodyRecordDao = db.bodyRecordDao()
+    private val appMetaDao = db.appMetaDao()
+
+    // ---------- 시드 ----------
+
+    /**
+     * 앱에 내장된 시드를 DB에 반영한다. 앱 시작 시 한 번 호출한다.
+     *
+     * 예전에는 `ensureXxxSeeded()`가 "테이블이 비어 있으면 넣기" 방식이라 **최초 1회만**
+     * 동작했다. 그래서 앱을 업데이트해 시드를 늘려도 기존 사용자에겐 영영 반영되지 않았다.
+     * 이제 적용된 시드 버전을 DB에 기록해두고, 내장 버전([SeedData.VERSION])이 더 높을 때만
+     * 밀린 단계를 돌린다.
+     *
+     * **새 시드를 추가할 때**: [SeedData.VERSION]을 올리고 아래에 그 버전의 단계를 추가한다.
+     */
+    suspend fun applySeeds() {
+        val applied = seedVersion()
+        if (applied >= SeedData.VERSION) return
+
+        if (applied < 1) {
+            // 루틴·식단표·목표는 **사용자가 고치는 콘텐츠**라 첫 설치에만 깐다.
+            // 재적용하면 사용자가 이름을 바꾸거나 종목을 뺀 걸 덮어쓰거나 중복이 생긴다.
+            ensureRoutinesSeeded()
+            ensureDietTemplatesSeeded()
+            ensureTargetSeeded()
+        }
+
+        // 카탈로그 시드(종목·음식)가 생기면 여기 붙는다. slug 기준 upsert라 여러 번 돌아도 안전하고,
+        // 사용자가 직접 추가한 항목(source = USER)은 건드리지 않는다.
+
+        appMetaDao.upsert(AppMeta(seedVersion = SeedData.VERSION))
+    }
+
+    suspend fun seedVersion(): Int = appMetaDao.seedVersion() ?: 0
 
     // ---------- 식단 기록 ----------
 
@@ -142,6 +175,7 @@ class Repository(private val db: AppDatabase) {
     suspend fun exportSnapshot(exportedAt: String): Snapshot = db.withTransaction {
         Snapshot(
             exportedAt = exportedAt,
+            seedVersion = seedVersion(),
             meals = mealDao.getAll().map { it.toDto() },
             workoutDays = workoutDao.getAll().toWorkoutDayDtos(),
             routines = routineDao.getAll().map { it.toDto() },
@@ -190,5 +224,8 @@ class Repository(private val db: AppDatabase) {
         snapshot.foods.forEach { foodDao.insert(it.toEntity()) }
         snapshot.bodyRecords.forEach { bodyRecordDao.upsert(it.toEntity()) }
         snapshot.target?.let { dietTargetDao.upsert(it.toEntity()) }
+
+        // 시드 버전도 같이 넘어와야, 옛 백업을 불러왔을 때 다음 실행에서 밀린 시드가 채워진다.
+        appMetaDao.upsert(AppMeta(seedVersion = snapshot.seedVersion))
     }
 }

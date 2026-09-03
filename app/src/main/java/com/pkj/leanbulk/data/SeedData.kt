@@ -27,6 +27,14 @@ data class RoutineTemplate(
 
 object SeedData {
 
+    /**
+     * 내장 시드의 버전. **시드 내용을 추가하거나 고치면 올린다.**
+     *
+     * 이 번호가 DB에 기록된 것보다 크면 `Repository.applySeeds()`가 밀린 단계를 돌린다.
+     * 올리지 않으면 새로 넣은 시드가 기존 사용자에게 영원히 안 들어간다.
+     */
+    const val VERSION = 1
+
     const val TARGET_KCAL = 2550.0
     const val TARGET_PROTEIN = 175.0
     const val TARGET_CARBS = 260.0
