@@ -1,7 +1,9 @@
 package com.pkj.leanbulk.data.backup
 
 import com.pkj.leanbulk.data.BodyRecord
+import com.pkj.leanbulk.data.ActivityLevel
 import com.pkj.leanbulk.data.DietTarget
+import com.pkj.leanbulk.data.GoalType
 import com.pkj.leanbulk.data.DietTemplateMeal
 import com.pkj.leanbulk.data.DietTemplateWithMeals
 import com.pkj.leanbulk.data.Exercise
@@ -148,7 +150,7 @@ object SnapshotCodec {
         memo = memo
     )
 
-    fun DietTarget.toDto() = TargetDto(kcal, protein, carbs, fat, sugar)
+    fun DietTarget.toDto() = TargetDto(kcal, protein, carbs, fat, sugar, goal.name, activityLevel.name)
 
     // ===================== DTO → 엔티티 =====================
     // id는 전부 0으로 두고 Room이 새로 매기게 한다. 관계는 중첩 구조로 복원한다.
@@ -248,5 +250,10 @@ object SnapshotCodec {
         memo = memo
     )
 
-    fun TargetDto.toEntity() = DietTarget(kcal = kcal, protein = protein, carbs = carbs, fat = fat, sugar = sugar)
+    fun TargetDto.toEntity() = DietTarget(
+        kcal = kcal, protein = protein, carbs = carbs, fat = fat, sugar = sugar,
+        goal = runCatching { GoalType.valueOf(goal) }.getOrDefault(GoalType.MAINTAIN),
+        activityLevel = runCatching { ActivityLevel.valueOf(activityLevel) }
+            .getOrDefault(ActivityLevel.MEDIUM)
+    )
 }

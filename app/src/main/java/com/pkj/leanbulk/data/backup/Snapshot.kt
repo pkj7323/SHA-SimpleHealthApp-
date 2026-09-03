@@ -174,5 +174,7 @@ data class TargetDto(
     val protein: Double,
     val carbs: Double,
     val fat: Double,
-    val sugar: Double
+    val sugar: Double,
+    val goal: String = "MAINTAIN",
+    val activityLevel: String = "MEDIUM"
 )

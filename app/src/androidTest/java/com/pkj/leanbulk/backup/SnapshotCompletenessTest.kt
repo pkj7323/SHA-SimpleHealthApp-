@@ -61,7 +61,9 @@ class SnapshotCompletenessTest {
         assertFields<Exercise>(
             "id", "slug", "name", "bodyPart", "equipment", "trackingType", "source", "hidden"
         )
-        assertFields<DietTarget>("id", "kcal", "protein", "carbs", "fat", "sugar")
+        assertFields<DietTarget>(
+            "id", "kcal", "protein", "carbs", "fat", "sugar", "goal", "activityLevel"
+        )
         assertFields<BodyRecord>(
             "id", "date", "weightKg", "muscleMassKg", "fatMassKg", "fatPercent", "waistCm", "tool", "memo"
         )

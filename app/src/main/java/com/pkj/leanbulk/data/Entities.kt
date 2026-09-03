@@ -98,7 +98,21 @@ data class FoodItem(
     @ColumnInfo(defaultValue = "0") val hidden: Boolean = false
 )
 
-/** 하루 섭취 목표. 행이 하나뿐인 설정 테이블. */
+/** 지금 뭘 하려는 중인지. 목표 칼로리를 얼마나 올리고 내릴지가 여기서 갈린다. */
+enum class GoalType { BULK, MAINTAIN, CUT }
+
+/** 운동 강도·생활 패턴. 유지 칼로리 추정의 계수가 된다. */
+enum class ActivityLevel { LOW, MEDIUM, HIGH }
+
+/**
+ * 하루 섭취 목표. 행이 하나뿐인 설정 테이블.
+ *
+ * [goal]과 [activityLevel]은 **권장값을 계산하는 재료이자 기록**이다. 저장된 숫자를
+ * 자동으로 따라 바꾸지는 않는다 — 체중을 잴 때마다 목표가 조용히 달라지면 사용자가
+ * 자기 목표를 신뢰할 수 없다. 대신 목표 화면에서 권장값을 보여주고 채울지 고르게 한다.
+ *
+ * 나중에 AI 챗이 "지금 벌크업 중"이라는 맥락을 여기서 읽는다.
+ */
 @Entity(tableName = "diet_target")
 data class DietTarget(
     @PrimaryKey val id: Int = 1,
@@ -106,7 +120,9 @@ data class DietTarget(
     val protein: Double,
     val carbs: Double,
     val fat: Double,
-    val sugar: Double
+    val sugar: Double,
+    @ColumnInfo(defaultValue = "MAINTAIN") val goal: GoalType = GoalType.MAINTAIN,
+    @ColumnInfo(defaultValue = "MEDIUM") val activityLevel: ActivityLevel = ActivityLevel.MEDIUM
 )
 
 /**

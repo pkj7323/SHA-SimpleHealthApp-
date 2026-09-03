@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.stateIn
 import java.time.Duration
@@ -409,12 +410,22 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
 
     // ===================== 목표 =====================
 
-    fun saveTarget(kcal: Double, protein: Double, carbs: Double, fat: Double, sugar: Double) {
+    fun saveTarget(target: DietTarget) {
         viewModelScope.launch {
-            repository.saveTarget(DietTarget(kcal = kcal, protein = protein, carbs = carbs, fat = fat, sugar = sugar))
+            repository.saveTarget(target)
             _toast.value = "목표 저장됨"
         }
     }
+
+    /**
+     * 목표 화면이 "권장값"을 보여주는 데 쓰는 최근 체중.
+     *
+     * 없으면 null이고, 그때는 권장값을 계산할 수 없다고 알려준다 — 아무 체중이나
+     * 가정해서 숫자를 만들어내면 그럴듯하지만 틀린 목표가 된다.
+     */
+    val latestWeightKg: StateFlow<Double?> = bodyRecords
+        .map { records -> records.maxByOrNull { it.date }?.weightKg }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     fun consumeToast() {
         _toast.value = null

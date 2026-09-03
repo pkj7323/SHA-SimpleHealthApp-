@@ -44,7 +44,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.pkj.leanbulk.data.ActivityLevel
 import com.pkj.leanbulk.data.DietTarget
+import com.pkj.leanbulk.data.GoalType
+import com.pkj.leanbulk.data.TargetCalculator
 import com.pkj.leanbulk.data.DietTemplateWithMeals
 import com.pkj.leanbulk.data.FoodItem
 import com.pkj.leanbulk.data.Macros
@@ -60,6 +63,7 @@ fun TodayDietScreen(vm: MainViewModel) {
     val foods by vm.foods.collectAsState()
     val target by vm.target.collectAsState()
     val savedAt by vm.savedAt.collectAsState()
+    val latestWeight by vm.latestWeightKg.collectAsState()
 
     var showTemplatePicker by remember { mutableStateOf(false) }
     var showAddMeal by remember { mutableStateOf(false) }
@@ -186,7 +190,8 @@ fun TodayDietScreen(vm: MainViewModel) {
     if (showTargetDialog) {
         TargetDialog(
             target = target,
-            onSave = { k, p, c, f, s -> vm.saveTarget(k, p, c, f, s); showTargetDialog = false },
+            latestWeightKg = latestWeight,
+            onSave = { vm.saveTarget(it); showTargetDialog = false },
             onDismiss = { showTargetDialog = false }
         )
     }
@@ -479,10 +484,18 @@ private fun FoodPickerDialog(
     )
 }
 
+/**
+ * 하루 섭취 목표.
+ *
+ * 목적(벌크업/유지/컷팅)과 활동량을 고르면 최근 체중으로 **권장값을 계산해 보여준다.**
+ * 다만 목표 숫자를 자동으로 바꾸지는 않는다 — 체중을 잴 때마다 목표가 조용히 달라지면
+ * 사용자가 자기 목표를 신뢰할 수 없다. "권장값 채우기"를 눌러야 칸에 들어간다.
+ */
 @Composable
 private fun TargetDialog(
     target: DietTarget?,
-    onSave: (Double, Double, Double, Double, Double) -> Unit,
+    latestWeightKg: Double?,
+    onSave: (DietTarget) -> Unit,
     onDismiss: () -> Unit
 ) {
     var kcal by remember { mutableStateOf(target?.kcal ?: 2550.0) }
@@ -490,12 +503,67 @@ private fun TargetDialog(
     var carbs by remember { mutableStateOf(target?.carbs ?: 260.0) }
     var fat by remember { mutableStateOf(target?.fat ?: 67.0) }
     var sugar by remember { mutableStateOf(target?.sugar ?: 60.0) }
+    var goal by remember { mutableStateOf(target?.goal ?: GoalType.MAINTAIN) }
+    var activity by remember { mutableStateOf(target?.activityLevel ?: ActivityLevel.MEDIUM) }
+
+    val suggestion = latestWeightKg?.let { TargetCalculator.suggest(it, goal, activity) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("하루 섭취 목표") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("목적", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    GoalType.entries.forEach { item ->
+                        FilterChip(
+                            selected = goal == item,
+                            onClick = { goal = item },
+                            label = { Text(item.label) }
+                        )
+                    }
+                }
+
+                Text("활동량", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ActivityLevel.entries.forEach { item ->
+                        FilterChip(
+                            selected = activity == item,
+                            onClick = { activity = item },
+                            label = { Text(item.label) }
+                        )
+                    }
+                }
+
+                if (suggestion == null) {
+                    Text(
+                        "권장값을 계산하려면 신체 탭에 체중을 한 번 기록해 주세요.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                } else {
+                    Text(
+                        "체중 ${latestWeightKg}kg 기준 권장값 — " +
+                            "${suggestion.kcal.toInt()}kcal · 단백질 ${suggestion.protein.toInt()}g · " +
+                            "탄수 ${suggestion.carbs.toInt()}g · 지방 ${suggestion.fat.toInt()}g",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            kcal = suggestion.kcal
+                            protein = suggestion.protein
+                            carbs = suggestion.carbs
+                            fat = suggestion.fat
+                            sugar = suggestion.sugar
+                        }
+                    ) { Text("권장값으로 채우기") }
+                }
+
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+
                 LabeledNumberField("칼로리 (kcal)", kcal) { kcal = it }
                 LabeledNumberField("단백질 (g)", protein) { protein = it }
                 LabeledNumberField("탄수화물 (g)", carbs) { carbs = it }
@@ -504,11 +572,34 @@ private fun TargetDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(kcal, protein, carbs, fat, sugar) }) { Text("저장") }
+            TextButton(
+                onClick = {
+                    onSave(
+                        DietTarget(
+                            kcal = kcal, protein = protein, carbs = carbs, fat = fat, sugar = sugar,
+                            goal = goal, activityLevel = activity
+                        )
+                    )
+                }
+            ) { Text("저장") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
     )
 }
+
+private val GoalType.label: String
+    get() = when (this) {
+        GoalType.BULK -> "벌크업"
+        GoalType.MAINTAIN -> "유지"
+        GoalType.CUT -> "컷팅"
+    }
+
+private val ActivityLevel.label: String
+    get() = when (this) {
+        ActivityLevel.LOW -> "적음"
+        ActivityLevel.MEDIUM -> "보통"
+        ActivityLevel.HIGH -> "많음"
+    }
 
 @Composable
 private fun TextInputDialog(

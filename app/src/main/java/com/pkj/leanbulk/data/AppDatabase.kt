@@ -71,6 +71,17 @@ internal val MIGRATION_6_7 = Migration(6, 7) { db ->
     db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_food_item_slug` ON `food_item` (`slug`)")
 }
 
+/**
+ * 7 → 8: 섭취 목표에 목적(벌크업/유지/컷팅)과 활동량을 붙인다.
+ *
+ * 기존 목표 숫자는 그대로 두고 기본값만 채운다 — 사용자가 직접 맞춰둔 값을
+ * 목적 도입을 이유로 덮어쓰면 안 된다.
+ */
+internal val MIGRATION_7_8 = Migration(7, 8) { db ->
+    db.execSQL("ALTER TABLE `diet_target` ADD COLUMN `goal` TEXT NOT NULL DEFAULT 'MAINTAIN'")
+    db.execSQL("ALTER TABLE `diet_target` ADD COLUMN `activityLevel` TEXT NOT NULL DEFAULT 'MEDIUM'")
+}
+
 @Database(
     entities = [
         MealEntry::class,
@@ -86,7 +97,7 @@ internal val MIGRATION_6_7 = Migration(6, 7) { db ->
         AppMeta::class,
         Exercise::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -114,10 +125,10 @@ abstract class AppDatabase : RoomDatabase() {
          * 그래서 버전을 올릴 때는 반드시 [MIGRATIONS]에 이주 코드를 하나 추가해야 한다.
          * 빠뜨리면 앱이 열리다 죽으므로 조용히 넘어가지 않는다.
          */
-        internal val MIGRATIONS = arrayOf(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+        internal val MIGRATIONS = arrayOf(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
 
         /** 마이그레이션 테스트가 참조한다. `@Database`의 version과 항상 같아야 한다. */
-        internal const val VERSION = 7
+        internal const val VERSION = 8
 
         fun get(context: Context): AppDatabase =
             instance ?: synchronized(this) {

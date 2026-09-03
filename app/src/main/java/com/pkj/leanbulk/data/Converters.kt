@@ -21,4 +21,18 @@ class Converters {
     @TypeConverter
     fun stringToItemSource(value: String): ItemSource =
         runCatching { ItemSource.valueOf(value) }.getOrDefault(ItemSource.USER)
+
+    @TypeConverter
+    fun goalTypeToString(value: GoalType): String = value.name
+
+    @TypeConverter
+    fun stringToGoalType(value: String): GoalType =
+        runCatching { GoalType.valueOf(value) }.getOrDefault(GoalType.MAINTAIN)
+
+    @TypeConverter
+    fun activityLevelToString(value: ActivityLevel): String = value.name
+
+    @TypeConverter
+    fun stringToActivityLevel(value: String): ActivityLevel =
+        runCatching { ActivityLevel.valueOf(value) }.getOrDefault(ActivityLevel.MEDIUM)
 }
