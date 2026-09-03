@@ -83,4 +83,4 @@ python scripts/pull_export.py
 2. `AppDatabase.MIGRATIONS`에 `Migration(n, n+1)`을 추가한다
 3. 빌드하면 생기는 `app/schemas/.../<n+1>.json`을 **커밋한다** — 다음 마이그레이션의 기준선이다
 
-빠뜨리면 `MigrationTest`가 잡는다(기존 사용자 앱이 열리다 죽는 걸 막기 위함). 버전을 올린 직후 첫 실행은 스키마 파일 생성 타이밍 때문에 한 번 헛돌 수 있으니, 한 번 더 돌려보면 된다.
+빠뜨리면 `MigrationTest`가 잡는다 — 기존 사용자 앱이 열리다 죽는 걸 막기 위함이다. 개발 중에는 앱을 지웠다 깔면 그만이라 눈치채기 어렵고, 배포하고 나서야 터지는 종류다.

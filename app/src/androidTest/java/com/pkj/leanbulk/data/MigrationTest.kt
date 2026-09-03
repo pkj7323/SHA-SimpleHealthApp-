@@ -20,10 +20,6 @@ import org.junit.runner.RunWith
  *  1. `AppDatabase.MIGRATIONS`에 `Migration(n, n+1)`을 추가한다
  *  2. `AppDatabase.VERSION`을 `@Database(version = ...)`과 맞춘다
  *  3. 새로 생긴 `app/schemas/.../<n+1>.json`을 **커밋한다** (다음 마이그레이션의 기준선이 된다)
- *
- * **버전을 올린 직후 첫 실행은 한 번 헛돈다.** 새 스키마 JSON을 ksp가 만들기 전에 테스트
- * APK의 에셋이 이미 병합돼서, 실패 이유가 "마이그레이션 없음"이 아니라 "스키마 파일 없음"
- * (`loadSchema`)으로 나온다. 한 번 더 돌리면 제대로 된 이유가 나온다.
  */
 @RunWith(AndroidJUnit4::class)
 class MigrationTest {

@@ -110,3 +110,18 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.room:room-testing:2.8.4")
 }
+
+/**
+ * 스키마를 만드는 ksp 태스크가, 그 폴더를 테스트 에셋으로 가져가는 태스크보다 먼저 돌게 한다.
+ *
+ * 스키마 폴더(`app/schemas`)는 빌드 산출물 바깥이라 Gradle이 둘의 관계를 모른다. 안 걸어두면
+ * 버전을 올린 직후 첫 실행에서 새 스키마가 테스트 APK에 안 들어가고, 마이그레이션 테스트가
+ * 엉뚱한 이유("스키마 파일 없음")로 실패한다. **틀린 이유로 실패하는 안전장치는 곧 무시하게
+ * 되므로** 첫 실행부터 제대로 된 이유가 나와야 한다.
+ */
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("AndroidTestAssets") }
+    .configureEach {
+        // mergeDebugAndroidTestAssets -> kspDebugKotlin
+        val variant = name.removePrefix("merge").removeSuffix("AndroidTestAssets")
+        dependsOn("ksp${variant}Kotlin")
+    }
