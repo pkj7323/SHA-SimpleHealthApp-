@@ -27,6 +27,17 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Room이 버전별 스키마를 JSON으로 남긴다. 마이그레이션을 쓰려면 "이전 버전이 어떤 모양이었나"의
+    // 기준이 있어야 하는데 그게 이 파일들이다. 반드시 커밋해야 한다.
+    ksp {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
+
+    // 계측 테스트에서 옛 버전 DB를 만들어 마이그레이션을 검증할 수 있도록 스키마를 넣어준다.
+    sourceSets {
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
+
     signingConfigs {
         create("release") {
             if (keystoreProperties.containsKey("storeFile")) {

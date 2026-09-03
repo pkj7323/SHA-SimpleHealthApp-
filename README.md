@@ -74,4 +74,13 @@ python scripts/pull_export.py
 ## 알려진 제약
 
 - 디버그 빌드는 최적화가 꺼져 있어 에뮬레이터에서 실제 기기보다 느리게 느껴질 수 있다.
-- DB 스키마가 바뀌면(버전업) 기존 로컬 데이터가 초기화된다 — 아직 마이그레이션을 붙이지 않았다.
+
+## DB 스키마를 바꿀 때
+
+예전에는 스키마를 바꾸면 기존 로컬 데이터가 초기화됐지만(`fallbackToDestructiveMigration`), 지금은 아니다. 대신 **버전을 올릴 때 마이그레이션을 직접 써야 한다**:
+
+1. `AppDatabase`의 `@Database(version = ...)`과 `AppDatabase.VERSION`을 같이 올린다
+2. `AppDatabase.MIGRATIONS`에 `Migration(n, n+1)`을 추가한다
+3. 빌드하면 생기는 `app/schemas/.../<n+1>.json`을 **커밋한다** — 다음 마이그레이션의 기준선이다
+
+빠뜨리면 `MigrationTest`가 잡는다(기존 사용자 앱이 열리다 죽는 걸 막기 위함). 버전을 올린 직후 첫 실행은 스키마 파일 생성 타이밍 때문에 한 번 헛돌 수 있으니, 한 번 더 돌려보면 된다.

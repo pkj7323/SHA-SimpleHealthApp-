@@ -231,7 +231,7 @@ JSON을 받아서 DB에 넣을 때 주의할 점.
 
 - [x] **JSON 직렬화 + 왕복 테스트** — `data/backup/`(`Snapshot`, `SnapshotCodec`), `Repository.exportSnapshot()` / `importSnapshot()`, 계측 테스트 5개 통과
 - [x] **백업/복원 UI** — 내보내기 탭의 "백업 · 복원" 섹션(`ExportScreen.BackupSection`), 확인 다이얼로그, 적용 전 되돌림점 자동 저장(`BackupFiles.saveRollbackPoint`)
-- [ ] **0단계 — 파괴적 마이그레이션 제거** (`fallbackToDestructiveMigration()` 삭제 + 스키마 export)
+- [x] **0단계 — 파괴적 마이그레이션 제거** (`fallbackToDestructiveMigration()` 삭제 + 스키마 export + `MigrationTest`)
   - WAL 끄기는 **불필요해졌으므로 하지 않는다**
 - [ ] **JSON 선택적 병합** (로드맵 3번 나머지 — "남의 루틴 중 이것만 가져오기")
 
