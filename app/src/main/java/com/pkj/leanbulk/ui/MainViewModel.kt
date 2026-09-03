@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.pkj.leanbulk.data.BodyRecord
 import com.pkj.leanbulk.data.DietTarget
 import com.pkj.leanbulk.data.DietTemplateWithMeals
+import com.pkj.leanbulk.data.Exercise
 import com.pkj.leanbulk.data.ExerciseWithSets
 import com.pkj.leanbulk.data.FoodItem
 import com.pkj.leanbulk.data.Macros
@@ -12,6 +13,7 @@ import com.pkj.leanbulk.data.MealEntry
 import com.pkj.leanbulk.data.Repository
 import com.pkj.leanbulk.data.RoutineWithExercises
 import com.pkj.leanbulk.data.SeedData
+import com.pkj.leanbulk.data.TrackingType
 import com.pkj.leanbulk.data.backup.Snapshot
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -102,6 +104,10 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
     val foods: StateFlow<List<FoodItem>> =
         repository.observeFoods().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** 종목 선택 목록. 사용자가 숨긴 건 빠져 있다. */
+    val exercises: StateFlow<List<Exercise>> =
+        repository.observeExercises().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val target: StateFlow<DietTarget?> =
         repository.observeTarget().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
@@ -187,13 +193,28 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
         viewModelScope.launch { repository.deleteRoutine(routineId) }
     }
 
-    fun addExercise(name: String) {
-        if (name.isBlank()) return
-        _workoutDraft.value = _workoutDraft.value + DraftExercise(
-            name = name.trim(),
-            sets = List(SeedData.DEFAULT_SET_COUNT) { DraftSet(0.0, 10) }
-        )
+    /** 카탈로그에서 고른 종목을 오늘 운동에 넣는다. 추적 방식이 같이 딸려온다. */
+    fun addExercise(exercise: Exercise) {
+        _workoutDraft.value = _workoutDraft.value + exercise.toDraft()
         scheduleWorkoutSave()
+    }
+
+    /**
+     * 카탈로그에 없는 종목을 직접 등록해서 바로 넣는다.
+     * 등록한 종목은 카탈로그에 남아 다음부터 검색된다.
+     */
+    fun addNewExercise(name: String, bodyPart: String, equipment: String, trackingType: TrackingType) {
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            val created = repository.addUserExercise(name, bodyPart, equipment, trackingType)
+            _workoutDraft.value = _workoutDraft.value + created.toDraft()
+            scheduleWorkoutSave()
+        }
+    }
+
+    /** 목록에서 안 보이게 치운다. 지우면 시드 갱신 때 되살아나므로 숨김으로 처리한다. */
+    fun hideExercise(id: Long) {
+        viewModelScope.launch { repository.hideExercise(id) }
     }
 
     fun removeExercise(index: Int) {

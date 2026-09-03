@@ -8,22 +8,28 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -38,7 +44,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.pkj.leanbulk.data.Exercise
 import com.pkj.leanbulk.data.RoutineWithExercises
+import com.pkj.leanbulk.data.TrackingType
 import java.time.LocalDate
 
 @Composable
@@ -48,6 +56,7 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
     val draft by vm.workoutDraft.collectAsState()
     val savedAt by vm.savedAt.collectAsState()
     val routines by vm.routines.collectAsState()
+    val exercises by vm.exercises.collectAsState()
 
     var showRoutinePicker by remember { mutableStateOf(false) }
     var showAddExercise by remember { mutableStateOf(false) }
@@ -120,8 +129,14 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
     }
 
     if (showAddExercise) {
-        AddExerciseDialog(
-            onAdd = { vm.addExercise(it); showAddExercise = false },
+        ExercisePickerDialog(
+            exercises = exercises,
+            onPick = { vm.addExercise(it); showAddExercise = false },
+            onCreate = { name, part, equip, type ->
+                vm.addNewExercise(name, part, equip, type)
+                showAddExercise = false
+            },
+            onHide = vm::hideExercise,
             onDismiss = { showAddExercise = false }
         )
     }
@@ -185,9 +200,13 @@ private fun ExerciseCard(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(exercise.name, fontWeight = FontWeight.Bold)
-                    if (exercise.defaultSetting.isNotBlank()) {
-                        Text(exercise.defaultSetting, style = MaterialTheme.typography.bodySmall)
-                    }
+                    Text(
+                        listOfNotNull(
+                            exercise.trackingType.label,
+                            exercise.defaultSetting.takeIf { it.isNotBlank() }
+                        ).joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
                 IconButton(onClick = onRemoveExercise) {
                     Icon(Icons.Filled.Delete, contentDescription = "종목 삭제")
@@ -198,6 +217,7 @@ private fun ExerciseCard(
                 SetRow(
                     setNumber = setIndex + 1,
                     set = set,
+                    trackingType = exercise.trackingType,
                     onChange = { transform -> onSetChange(setIndex, transform) }
                 )
             }
@@ -216,22 +236,57 @@ private fun ExerciseCard(
                     Text("세트")
                 }
                 Box(Modifier.weight(1f))
-                Text("볼륨 ${exercise.volume.toInt()}kg")
+                // 무게를 안 쓰는 종목은 볼륨이라는 개념이 없어서 0kg만 뜬다. 아예 감춘다.
+                if (exercise.trackingType == TrackingType.WEIGHT_REPS ||
+                    exercise.trackingType == TrackingType.WEIGHT_TIME
+                ) {
+                    Text("볼륨 ${exercise.volume.toInt()}kg")
+                }
             }
         }
     }
 }
 
+/**
+ * 세트 한 줄. **종목의 추적 방식에 따라 입력 칸이 달라진다.**
+ *
+ * 예전에는 무게·횟수 칸만 있어서 플랭크를 넣으면 "0kg 0회"라는 무의미한 기록이 남았다.
+ */
 @Composable
-private fun SetRow(setNumber: Int, set: DraftSet, onChange: ((DraftSet) -> DraftSet) -> Unit) {
+private fun SetRow(
+    setNumber: Int,
+    set: DraftSet,
+    trackingType: TrackingType,
+    onChange: ((DraftSet) -> DraftSet) -> Unit
+) {
     Row(
         Modifier.fillMaxWidth().padding(top = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text("세트 $setNumber", modifier = Modifier.width(52.dp))
-        NumberField("무게(kg)", set.weightKg) { newWeight -> onChange { it.copy(weightKg = newWeight) } }
-        IntField("횟수", set.reps) { newReps -> onChange { it.copy(reps = newReps ?: it.reps) } }
+
+        val weight = @Composable {
+            NumberField("무게(kg)", set.weightKg) { v -> onChange { it.copy(weightKg = v) } }
+        }
+        val reps = @Composable {
+            IntField("횟수", set.reps) { v -> onChange { it.copy(reps = v ?: it.reps) } }
+        }
+        val duration = @Composable {
+            IntField("시간(초)", set.durationSec ?: 0) { v -> onChange { it.copy(durationSec = v ?: 0) } }
+        }
+        val distance = @Composable {
+            NumberField("거리(m)", set.distanceM ?: 0.0) { v -> onChange { it.copy(distanceM = v) } }
+        }
+
+        when (trackingType) {
+            TrackingType.WEIGHT_REPS -> { weight(); reps() }
+            TrackingType.REPS -> reps()
+            TrackingType.TIME -> duration()
+            TrackingType.WEIGHT_TIME -> { weight(); duration() }
+            TrackingType.DISTANCE_TIME -> { distance(); duration() }
+        }
+
         Checkbox(checked = set.done, onCheckedChange = { checked -> onChange { it.copy(done = checked) } })
     }
 }
@@ -316,21 +371,183 @@ private fun RoutineNameDialog(
     )
 }
 
+/**
+ * 카탈로그에서 종목을 검색해서 고른다.
+ *
+ * 예전에는 이름을 매번 타이핑했다. 그러면 오타로 같은 종목이 여러 개로 갈라지고,
+ * 무엇보다 **추적 방식(무게×횟수 / 시간 / 거리)을 알 수 없어서 입력 칸을 바꿔줄 수가 없었다.**
+ * 목록에 없으면 직접 등록할 수 있고, 등록한 종목은 카탈로그에 남아 다음부터 검색된다.
+ */
 @Composable
-private fun AddExerciseDialog(onAdd: (String) -> Unit, onDismiss: () -> Unit) {
-    var name by remember { mutableStateOf("") }
+private fun ExercisePickerDialog(
+    exercises: List<Exercise>,
+    onPick: (Exercise) -> Unit,
+    onCreate: (String, String, String, TrackingType) -> Unit,
+    onHide: (Long) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var query by remember { mutableStateOf("") }
+    var bodyPart by remember { mutableStateOf<String?>(null) }
+    var creating by remember { mutableStateOf(false) }
+
+    val bodyParts = remember(exercises) { exercises.map { it.bodyPart }.distinct() }
+    val filtered = exercises.filter {
+        (bodyPart == null || it.bodyPart == bodyPart) && it.name.contains(query, ignoreCase = true)
+    }
+
+    if (creating) {
+        NewExerciseDialog(
+            initialName = query,
+            bodyParts = bodyParts,
+            onConfirm = { n, part, equip, type -> onCreate(n, part, equip, type); creating = false },
+            onDismiss = { creating = false }
+        )
+        return
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("종목 추가") },
         text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("종목 이름") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            Column {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text("종목 검색") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    item {
+                        FilterChip(
+                            selected = bodyPart == null,
+                            onClick = { bodyPart = null },
+                            label = { Text("전체") }
+                        )
+                    }
+                    items(bodyParts) { part ->
+                        FilterChip(
+                            selected = bodyPart == part,
+                            onClick = { bodyPart = if (bodyPart == part) null else part },
+                            label = { Text(part) }
+                        )
+                    }
+                }
+
+                if (filtered.isEmpty()) {
+                    Text("찾는 종목이 없습니다. 아래에서 직접 추가하세요.")
+                } else {
+                    LazyColumn(Modifier.heightIn(max = 320.dp)) {
+                        items(filtered, key = { it.id }) { exercise ->
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                TextButton(
+                                    onClick = { onPick(exercise) },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Column(Modifier.fillMaxWidth()) {
+                                        Text(exercise.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(
+                                            "${exercise.bodyPart} · ${exercise.equipment} · ${exercise.trackingType.label}",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                                // 지우지 않고 숨긴다 — 지우면 다음 시드 갱신 때 되살아난다.
+                                IconButton(onClick = { onHide(exercise.id) }) {
+                                    Icon(Icons.Filled.VisibilityOff, contentDescription = "목록에서 숨기기")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         },
-        confirmButton = { TextButton(onClick = { onAdd(name) }) { Text("추가") } },
+        confirmButton = { TextButton(onClick = { creating = true }) { Text("직접 추가") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("닫기") } }
+    )
+}
+
+/** 카탈로그에 없는 종목을 등록한다. 추적 방식을 고르는 게 핵심이다. */
+@Composable
+private fun NewExerciseDialog(
+    initialName: String,
+    bodyParts: List<String>,
+    onConfirm: (String, String, String, TrackingType) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var name by remember { mutableStateOf(initialName) }
+    var bodyPart by remember { mutableStateOf(bodyParts.firstOrNull() ?: "기타") }
+    var equipment by remember { mutableStateOf("기타") }
+    var trackingType by remember { mutableStateOf(TrackingType.WEIGHT_REPS) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("종목 직접 추가") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("종목 이름") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text("부위", modifier = Modifier.padding(top = 12.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(bodyParts.ifEmpty { listOf("기타") }) { part ->
+                        FilterChip(
+                            selected = bodyPart == part,
+                            onClick = { bodyPart = part },
+                            label = { Text(part) }
+                        )
+                    }
+                }
+
+                Text("기구", modifier = Modifier.padding(top = 12.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(EQUIPMENTS) { item ->
+                        FilterChip(
+                            selected = equipment == item,
+                            onClick = { equipment = item },
+                            label = { Text(item) }
+                        )
+                    }
+                }
+
+                Text("무엇으로 재나요", modifier = Modifier.padding(top = 12.dp))
+                Column {
+                    TrackingType.entries.forEach { type ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = trackingType == type, onClick = { trackingType = type })
+                            Text(type.label)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = name.isNotBlank(),
+                onClick = { onConfirm(name, bodyPart, equipment, trackingType) }
+            ) { Text("추가") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
     )
 }
+
+private val EQUIPMENTS = listOf("바벨", "덤벨", "머신", "케이블", "맨몸", "기타")
+
+/** 목록·선택지에 보여줄 짧은 설명. */
+val TrackingType.label: String
+    get() = when (this) {
+        TrackingType.WEIGHT_REPS -> "무게 × 횟수"
+        TrackingType.REPS -> "횟수"
+        TrackingType.TIME -> "시간"
+        TrackingType.WEIGHT_TIME -> "무게 + 시간"
+        TrackingType.DISTANCE_TIME -> "거리 + 시간"
+    }

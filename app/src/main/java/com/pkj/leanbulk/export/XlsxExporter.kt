@@ -3,7 +3,9 @@ package com.pkj.leanbulk.export
 import android.content.Context
 import com.pkj.leanbulk.data.BodyRecord
 import com.pkj.leanbulk.data.DietTarget
+import com.pkj.leanbulk.data.Exercise
 import com.pkj.leanbulk.data.ExerciseWithSets
+import com.pkj.leanbulk.data.TrackingType
 import com.pkj.leanbulk.data.MealEntry
 import com.pkj.leanbulk.data.RoutineWithExercises
 import com.pkj.leanbulk.data.SeedData
@@ -30,6 +32,7 @@ object XlsxExporter {
         workouts: List<ExerciseWithSets>,
         bodyRecords: List<BodyRecord>,
         routines: List<RoutineWithExercises>,
+        exercises: List<Exercise>,
         target: DietTarget?
     ): File {
         val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
@@ -42,7 +45,7 @@ object XlsxExporter {
             val wb = Workbook(out, "린매스업 트래커", "1.0")
 
             writeWorkoutSheet(wb, workouts)
-            writeExerciseListSheet(wb, routines)
+            writeExerciseListSheet(wb, routines, exercises)
             writeBodyRecordSheet(wb, bodyRecords)
             writeDietCheckSheet(wb, meals, target)
             writeDietDetailSheet(wb, meals)
@@ -108,7 +111,11 @@ object XlsxExporter {
         val ws = wb.newWorksheet("운동일지")
         ws.value(0, 0, "운동일지")
         ws.value(1, 0, "노란색 셀에 입력하세요. 볼륨은 자동 계산됩니다.")
-        val headers = listOf("날짜", "분할", "종목", "무게(kg)", "세트1", "세트2", "세트3", "세트4", "총 횟수", "볼륨(kg)", "RIR", "메모")
+        // "기록방식"은 맨 뒤에 덧붙인다. 앞 열의 위치가 그대로여야 기존 엑셀 수식이 안 깨진다.
+        val headers = listOf(
+            "날짜", "분할", "종목", "무게(kg)", "세트1", "세트2", "세트3", "세트4",
+            "총 횟수", "볼륨(kg)", "RIR", "메모", "기록방식"
+        )
         headers.forEachIndexed { c, h -> ws.value(2, c, h) }
 
         var row = 3
@@ -118,36 +125,86 @@ object XlsxExporter {
                 val doneSets = item.sets.sortedBy { it.setIndex }.filter { it.done }
                 if (doneSets.isEmpty()) return@forEach
 
-                groupRows(doneSets).forEach { group ->
-                    val totalReps = group.sets.sumOf { it.reps }
+                val type = item.exercise.trackingType
+                val usesWeight = type == TrackingType.WEIGHT_REPS || type == TrackingType.WEIGHT_TIME
+
+                groupRows(doneSets, usesWeight).forEach { group ->
+                    // 세트 칸에 들어갈 값의 뜻이 종목마다 다르다. 시간형에 횟수(0)를 쓰면 거짓 기록이 된다.
+                    val values = group.sets.map { primaryValue(type, it) }
+                    val total = values.sum()
+
                     ws.value(row, 0, item.exercise.date)
                     ws.value(row, 1, item.exercise.routineName)
                     ws.value(row, 2, item.exercise.exerciseName)
-                    ws.value(row, 3, group.weight)
-                    group.sets.forEachIndexed { i, s -> ws.value(row, 4 + i, s.reps.toDouble()) }
-                    ws.value(row, 8, totalReps.toDouble())
-                    ws.value(row, 9, group.weight * totalReps)
-                    if (item.exercise.memo.isNotBlank()) ws.value(row, 11, item.exercise.memo)
+                    if (usesWeight) ws.value(row, 3, group.weight)
+                    values.forEachIndexed { i, v -> ws.value(row, 4 + i, v) }
+                    ws.value(row, 8, total)
+                    // 볼륨은 무게×횟수일 때만 뜻이 있다.
+                    if (type == TrackingType.WEIGHT_REPS) ws.value(row, 9, group.weight * total)
+
+                    val memo = buildList {
+                        if (item.exercise.memo.isNotBlank()) add(item.exercise.memo)
+                        // 유산소는 세트 칸에 시간을 쓰므로 거리는 따로 적어준다.
+                        if (type == TrackingType.DISTANCE_TIME) {
+                            val meters = group.sets.sumOf { it.distanceM ?: 0.0 }
+                            if (meters > 0) add("거리 ${meters.toInt()}m")
+                        }
+                    }.joinToString(" / ")
+                    if (memo.isNotBlank()) ws.value(row, 11, memo)
+
+                    ws.value(row, 12, unitLabel(type))
                     row++
                 }
             }
     }
 
+    /** 세트 칸에 적을 값. 종목의 기록 방식에 따라 횟수일 수도, 초일 수도 있다. */
+    private fun primaryValue(type: TrackingType, set: WorkoutSet): Double = when (type) {
+        TrackingType.WEIGHT_REPS, TrackingType.REPS -> set.reps.toDouble()
+        TrackingType.TIME, TrackingType.WEIGHT_TIME, TrackingType.DISTANCE_TIME ->
+            (set.durationSec ?: 0).toDouble()
+    }
+
+    /** 세트 칸의 숫자가 무슨 단위인지 알려준다. 없으면 시간이 횟수로 읽힌다. */
+    private fun unitLabel(type: TrackingType): String = when (type) {
+        TrackingType.WEIGHT_REPS -> "무게 × 횟수"
+        TrackingType.REPS -> "횟수"
+        TrackingType.TIME -> "시간(초)"
+        TrackingType.WEIGHT_TIME -> "무게 + 시간(초)"
+        TrackingType.DISTANCE_TIME -> "시간(초), 거리는 메모"
+    }
+
     private class SetGroup(val weight: Double, val sets: List<WorkoutSet>)
 
-    private fun groupRows(sets: List<WorkoutSet>): List<SetGroup> =
-        sets.groupBy { it.weightKg }
-            .flatMap { (weight, group) -> group.chunked(4).map { SetGroup(weight, it) } }
+    /** 무게를 안 쓰는 종목은 무게로 나눌 이유가 없으므로 순서대로만 자른다. */
+    private fun groupRows(sets: List<WorkoutSet>, usesWeight: Boolean): List<SetGroup> =
+        if (usesWeight) {
+            sets.groupBy { it.weightKg }
+                .flatMap { (weight, group) -> group.chunked(4).map { SetGroup(weight, it) } }
+        } else {
+            sets.chunked(4).map { SetGroup(0.0, it) }
+        }
 
-    private fun writeExerciseListSheet(wb: Workbook, routines: List<RoutineWithExercises>) {
+    private fun writeExerciseListSheet(
+        wb: Workbook,
+        routines: List<RoutineWithExercises>,
+        exercises: List<Exercise>
+    ) {
         val ws = wb.newWorksheet("종목목록")
-        listOf("종목", "분할", "기본 세팅").forEachIndexed { c, h -> ws.value(0, c, h) }
+        listOf("종목", "분할", "기본 세팅", "부위", "기구", "기록방식")
+            .forEachIndexed { c, h -> ws.value(0, c, h) }
+
+        val catalogByName = exercises.associateBy { it.name }
         var row = 1
         routines.forEach { item ->
             item.exercises.sortedBy { it.orderIndex }.forEach { ex ->
+                val catalog = catalogByName[ex.exerciseName]
                 ws.value(row, 0, ex.exerciseName)
                 ws.value(row, 1, item.routine.name)
                 ws.value(row, 2, ex.defaultSetting)
+                ws.value(row, 3, catalog?.bodyPart ?: "")
+                ws.value(row, 4, catalog?.equipment ?: "")
+                ws.value(row, 5, unitLabel(ex.trackingType))
                 row++
             }
         }

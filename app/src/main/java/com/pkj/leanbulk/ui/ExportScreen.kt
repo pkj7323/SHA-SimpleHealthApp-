@@ -55,6 +55,7 @@ fun ExportScreen(vm: MainViewModel) {
     val workouts by vm.allWorkouts.collectAsState()
     val bodyRecords by vm.bodyRecords.collectAsState()
     val routines by vm.routines.collectAsState()
+    val exercises by vm.exercises.collectAsState()
     val target by vm.target.collectAsState()
 
     var lastFile by remember { mutableStateOf<File?>(null) }
@@ -110,6 +111,7 @@ fun ExportScreen(vm: MainViewModel) {
                         workouts.workoutsInRange(range),
                         bodyRecords.bodyRecordsInRange(range),
                         routines,
+                        exercises,
                         target
                     )
                     lastFile = file
