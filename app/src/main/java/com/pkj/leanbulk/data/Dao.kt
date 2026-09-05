@@ -341,6 +341,13 @@ interface RoutineDao {
     @Query("SELECT COUNT(*) FROM routine WHERE name = :name AND id != :exceptId")
     suspend fun countByName(name: String, exceptId: Long = 0): Int
 
+    /**
+     * 이름으로 루틴을 찾는다. 기록(`workout_exercise`)은 루틴을 **이름으로만** 기억하기 때문에
+     * 자동 반영이 대상 루틴을 찾으려면 이 길밖에 없다. 이름 중복을 막아뒀으므로 하나로 정해진다.
+     */
+    @Query("SELECT id FROM routine WHERE name = :name LIMIT 1")
+    suspend fun findIdByName(name: String): Long?
+
     /** 자식(routine_exercise)은 외래키 CASCADE로 같이 지워진다. */
     @Query("DELETE FROM routine")
     suspend fun deleteAll()

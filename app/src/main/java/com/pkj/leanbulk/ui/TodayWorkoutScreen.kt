@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -68,6 +69,8 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
     val savedAt by vm.savedAt.collectAsState()
     val routines by vm.routines.collectAsState()
     val exercises by vm.exercises.collectAsState()
+    val today by vm.today.collectAsState()
+    val routineSynced by vm.routineSynced.collectAsState()
 
     var showRoutinePicker by remember { mutableStateOf(false) }
     var showAddExercise by remember { mutableStateOf(false) }
@@ -109,16 +112,40 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
                     onDateChange = vm::setWorkoutDate
                 )
 
-                // 루틴 이름은 길 수 있으므로 한 줄 전체를 쓰고 넘치면 … 으로 자른다.
-                OutlinedButton(
-                    onClick = { showRoutinePicker = true },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // 루틴 이름은 길 수 있으므로 남는 폭을 다 쓰고 넘치면 … 으로 자른다.
+                    OutlinedButton(
+                        onClick = { showRoutinePicker = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = if (routineName.isBlank()) "루틴 선택" else routineName,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                    }
+                    // 연결만 떼는 버튼. 종목은 그대로 두고 자동 반영만 멈춘다.
+                    if (routineName.isNotBlank()) {
+                        IconButton(onClick = vm::clearRoutine) {
+                            Icon(Icons.Filled.LinkOff, contentDescription = "루틴 연결 해제")
+                        }
+                    }
+                }
+
+                // 편집이 루틴을 조용히 바꾸는 동작이라, 지금 그러는 중인지 화면에 적어둔다.
+                if (routineName.isNotBlank()) {
                     Text(
-                        text = if (routineName.isBlank()) "루틴 선택" else routineName,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
+                        text = when {
+                            date != today -> "지난 날짜라 '$routineName' 루틴에는 반영되지 않습니다"
+                            routineSynced -> "'$routineName' 루틴에 반영됨"
+                            else -> "고치면 '$routineName' 루틴에 반영됩니다"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(top = 4.dp)
                     )
                 }
 

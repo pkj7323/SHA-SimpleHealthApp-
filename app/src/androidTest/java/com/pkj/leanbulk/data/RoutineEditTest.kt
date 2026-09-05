@@ -119,6 +119,35 @@ class RoutineEditTest {
         )
     }
 
+    /** 오늘 고친 구성이 그 루틴에 그대로 들어가야 다음에 불러올 때 최신이 나온다. */
+    @Test
+    fun 편집한_구성이_같은_이름의_루틴에_반영된다() = runBlocking<Unit> {
+        repo.saveAsNewRoutine("하체", exercises("스쿼트", "레그 프레스"))
+
+        val applied = repo.syncRoutineByName("하체", exercises("스쿼트", "레그 프레스", "레그 컬"))
+
+        assertTrue("반영됐다고 알려야 한다", applied)
+        val after = repo.observeRoutines().first().first { it.routine.name == "하체" }
+        assertEquals(3, after.exercises.size)
+    }
+
+    /**
+     * 자동으로 도는 덮어쓰기라 안 되는 경우가 더 중요하다. 되돌릴 수단이 없다.
+     */
+    @Test
+    fun 빈_구성이나_없는_이름은_루틴을_건드리지_않는다() = runBlocking<Unit> {
+        repo.saveAsNewRoutine("하체", exercises("스쿼트", "레그 프레스"))
+
+        // 다시 짜려고 종목을 전부 지운 순간 루틴까지 비면 복구할 방법이 없다.
+        assertFalse("빈 구성이 반영됐다", repo.syncRoutineByName("하체", emptyList()))
+        // 루틴을 지웠거나 이름을 바꾼 뒤의 기록이 여기로 온다.
+        assertFalse("없는 루틴에 반영됐다", repo.syncRoutineByName("없는 루틴", exercises("스쿼트")))
+        assertFalse("이름이 비었는데 반영됐다", repo.syncRoutineByName("", exercises("스쿼트")))
+
+        val after = repo.observeRoutines().first().first { it.routine.name == "하체" }
+        assertEquals("루틴이 바뀌었다", 2, after.exercises.size)
+    }
+
     @Test
     fun 같은_이름의_루틴을_찾아낸다() = runBlocking<Unit> {
         repo.addRoutine("가슴")

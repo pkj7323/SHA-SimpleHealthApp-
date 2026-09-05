@@ -51,6 +51,10 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
     private val _savedAt = MutableStateFlow<String?>(null)
     val savedAt: StateFlow<String?> = _savedAt
 
+    /** 마지막 자동 저장이 지금 루틴에도 반영됐는지. */
+    private val _routineSynced = MutableStateFlow(false)
+    val routineSynced: StateFlow<Boolean> = _routineSynced
+
     private var workoutSaveJob: Job? = null
     private var pendingWorkout: WorkoutSnapshot? = null
     private var dietSaveJob: Job? = null
@@ -166,6 +170,8 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
 
     private fun loadWorkoutDraft(date: String) {
         viewModelScope.launch {
+            // 다른 날·다른 루틴을 여는 순간 "반영됨" 표시는 옛말이 된다.
+            _routineSynced.value = false
             val saved = repository.observeWorkout(date).first()
             if (saved.isEmpty()) {
                 _workoutDraft.value = emptyList()
@@ -178,6 +184,7 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
     }
 
     fun loadRoutine(routine: RoutineWithExercises) {
+        _routineSynced.value = false
         _routineName.value = routine.routine.name
         _workoutDraft.value = routine.exercises.sortedBy { it.exercise.orderIndex }.map { it.toDraft() }
         scheduleWorkoutSave()
@@ -189,6 +196,19 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
      * 이름이 겹치면 만들지 않는다 — 목록에 같은 이름이 둘 있으면 어느 쪽을 고르는 건지
      * 알 수 없다. 덮어쓰려는 것이라면 [overwriteRoutine]이 따로 있다.
      */
+    /**
+     * 지금 기록에서 루틴 연결만 뗀다. **종목은 그대로 둔다** — 루틴에 반영되는 게 싫을 뿐
+     * 오늘 한 운동을 지우려는 게 아니다.
+     *
+     * 떼고 나면 자동 반영도 멈춘다([syncRoutine]이 이름으로 루틴을 찾기 때문).
+     */
+    fun clearRoutine() {
+        if (_routineName.value.isBlank()) return
+        _routineName.value = ""
+        _routineSynced.value = false
+        scheduleWorkoutSave()
+    }
+
     fun addRoutine(name: String) {
         val trimmed = name.trim()
         if (trimmed.isBlank()) return
@@ -326,8 +346,24 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
 
     private suspend fun writeWorkout(s: WorkoutSnapshot) {
         repository.saveWorkoutDay(s.date, s.draft.toPersistables(s.date, s.routineName))
+        syncRoutine(s)
         pendingWorkout = null
         _savedAt.value = LocalDateTime.now().format(TIME_FMT)
+    }
+
+    /**
+     * 오늘 고친 구성을 그 루틴에 그대로 반영한다. 다음에 그 루틴을 불러오면 최신 상태가 나온다.
+     *
+     * **오늘 날짜일 때만 반영한다.** 지난 기록을 들춰보다 오타 하나 고친 것으로 지금 쓰는
+     * 루틴이 몇 주 전 무게로 되돌아가면 안 된다. 반영 여부는 [routineSynced]로 화면에 알린다
+     * — 조용히 남의 데이터를 고치는 동작이라 사용자가 모르면 안 된다.
+     */
+    private suspend fun syncRoutine(s: WorkoutSnapshot) {
+        if (s.date != _today.value) {
+            _routineSynced.value = false
+            return
+        }
+        _routineSynced.value = repository.syncRoutineByName(s.routineName, s.draft.toRoutineExercises())
     }
 
     // ===================== 식단 편집 =====================

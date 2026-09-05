@@ -219,6 +219,25 @@ class Repository(private val db: AppDatabase) {
         exercises: List<Pair<RoutineExercise, List<RoutineSet>>>
     ) = routineDao.replaceExercises(routineId, exercises)
 
+    /**
+     * 편집한 구성을 같은 이름의 루틴에 자동으로 반영한다. 반영했으면 `true`.
+     *
+     * 자동으로 도는 덮어쓰기라 **안 되는 경우를 넓게 잡았다**. 되돌릴 수단이 없기 때문이다:
+     * - 이름이 비었거나 그 이름의 루틴이 없으면(지웠거나 이름을 바꿨다) 아무것도 안 한다
+     * - **종목이 하나도 없으면 반영하지 않는다.** 다시 짜려고 전부 지운 순간 루틴까지
+     *   빈 껍데기가 되면 복구할 방법이 없다. 루틴을 비우고 싶으면 [overwriteRoutine]으로
+     *   직접 해야 한다
+     */
+    suspend fun syncRoutineByName(
+        name: String,
+        exercises: List<Pair<RoutineExercise, List<RoutineSet>>>
+    ): Boolean {
+        if (name.isBlank() || exercises.isEmpty()) return false
+        val id = routineDao.findIdByName(name) ?: return false
+        routineDao.replaceExercises(id, exercises)
+        return true
+    }
+
     suspend fun renameRoutine(routineId: Long, name: String) = routineDao.rename(routineId, name)
 
     suspend fun deleteRoutine(routineId: Long) = routineDao.delete(routineId)
