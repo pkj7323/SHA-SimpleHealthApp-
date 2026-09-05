@@ -18,6 +18,7 @@ import com.pkj.leanbulk.data.MealEntry
 import com.pkj.leanbulk.data.Repository
 import com.pkj.leanbulk.data.Routine
 import com.pkj.leanbulk.data.RoutineExercise
+import com.pkj.leanbulk.data.RoutineSet
 import com.pkj.leanbulk.data.WorkoutExercise
 import com.pkj.leanbulk.data.WorkoutSet
 import com.pkj.leanbulk.data.backup.BackupFiles
@@ -148,11 +149,11 @@ class SnapshotRoundTripTest {
                 trackingType = TrackingType.DISTANCE_TIME, source = ItemSource.SEED
             )
         )
-        // 사용자가 숨긴 항목도 백업에 실려야 복원했을 때 숨김이 유지된다.
+        // 사용자가 직접 만든 종목도 백업에 실려야 한다 — 시드로는 복구되지 않기 때문이다.
         db.exerciseDao().insert(
             Exercise(
                 slug = "user-내가-만든-종목-1", name = "내가 만든 종목", bodyPart = "코어", equipment = "기타",
-                trackingType = TrackingType.REPS, source = ItemSource.USER, hidden = true
+                trackingType = TrackingType.REPS, source = ItemSource.USER
             )
         )
 
@@ -213,15 +214,24 @@ class SnapshotRoundTripTest {
 
         // orderIndex에 일부러 구멍을 낸다. 불러올 때 0,1,2로 다시 매겨지면 이 테스트가 잡아낸다.
         val routineId = db.routineDao().insertRoutine(Routine(name = "4분할 A", orderIndex = 3))
-        db.routineDao().insertExercises(
+        db.routineDao().insertExercisesWithSets(
+            routineId,
             listOf(
+                // 세트마다 무게가 다른 구성. 예전엔 기본값 한 쌍만 담겨서 이런 게 뭉개졌다.
                 RoutineExercise(
                     routineId = routineId, orderIndex = 0, exerciseName = "스쿼트",
-                    defaultSetting = "5x5", defaultWeight = 80.0, defaultReps = 5
+                    defaultSetting = "5x5"
+                ) to listOf(
+                    RoutineSet(routineExerciseId = 0, setIndex = 0, weightKg = 60.0, reps = 8),
+                    RoutineSet(routineExerciseId = 0, setIndex = 1, weightKg = 80.0, reps = 5),
+                    RoutineSet(routineExerciseId = 0, setIndex = 2, weightKg = 80.0, reps = 5)
                 ),
+                // 세트 수가 기본값과 다른 구성.
                 RoutineExercise(
                     routineId = routineId, orderIndex = 7, exerciseName = "레그프레스",
-                    defaultSetting = "", defaultWeight = 120.0, defaultReps = 12
+                    defaultSetting = ""
+                ) to listOf(
+                    RoutineSet(routineExerciseId = 0, setIndex = 0, weightKg = 120.0, reps = 12)
                 )
             )
         )

@@ -121,6 +121,83 @@ class MigrationTest {
         }
     }
 
+    /**
+     * 8 → 9는 컬럼을 **지우는** 첫 마이그레이션이다. SQLite 3.19에는 `DROP COLUMN`이 없어서
+     * 테이블을 새로 만들어 옮겨 담는데, 그 과정에서 행을 흘리면 카탈로그가 통째로 날아간다.
+     *
+     * 숨겨져 있던 종목이 **다시 보이는 것**까지가 의도한 결과다. 되돌릴 방법이 없어서
+     * 기능을 없앴으므로, 숨김 상태로 갇힌 종목을 그대로 두면 사용자가 영영 못 꺼낸다.
+     */
+    @Test
+    fun 종목_숨김_컬럼을_없애도_종목은_남는다() {
+        helper.createDatabase(TEST_DB, 8).use { db ->
+            db.execSQL(
+                "INSERT INTO exercise (slug, name, bodyPart, equipment, trackingType, source, hidden) " +
+                    "VALUES ('bench-press', '벤치 프레스', '가슴', '바벨', 'WEIGHT_REPS', 'SEED', 0)"
+            )
+            db.execSQL(
+                "INSERT INTO exercise (slug, name, bodyPart, equipment, trackingType, source, hidden) " +
+                    "VALUES ('user-내-종목', '내 종목', '코어', '맨몸', 'REPS', 'USER', 1)"
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, AppDatabase.VERSION, true, *AppDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT slug, name, source FROM exercise ORDER BY slug").use { c ->
+                    assertTrue("종목이 사라졌다", c.moveToFirst())
+                    assertEquals("bench-press", c.getString(0))
+                    assertTrue("숨겨져 있던 종목이 사라졌다", c.moveToNext())
+                    assertEquals("내 종목", c.getString(1))
+                    assertEquals("사용자가 만든 종목이 시드로 바뀌었다", "USER", c.getString(2))
+                }
+            }
+    }
+
+    /**
+     * 9 → 10은 루틴 종목의 기본값 한 쌍을 `routine_set` 행들로 편다.
+     *
+     * 두 가지가 어긋나기 쉽다:
+     *  - 세트를 채운 **뒤에** 부모 테이블을 갈아치우면, 외래키 CASCADE로 방금 넣은 세트가 지워진다
+     *  - 종목 id가 유지돼야 세트가 제 부모를 가리킨다
+     */
+    @Test
+    fun 루틴_기본값이_세트로_펴진다() {
+        helper.createDatabase(TEST_DB, 9).use { db ->
+            db.execSQL("INSERT INTO routine (id, name, orderIndex) VALUES (1, '내 루틴', 0)")
+            db.execSQL(
+                "INSERT INTO routine_exercise " +
+                    "(id, routineId, orderIndex, exerciseName, trackingType, defaultSetting, defaultWeight, defaultReps) " +
+                    "VALUES (5, 1, 0, '벤치 프레스', 'WEIGHT_REPS', '5x5', 62.5, 8)"
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, AppDatabase.VERSION, true, *AppDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT exerciseName, defaultSetting FROM routine_exercise WHERE id = 5").use { c ->
+                    assertTrue("루틴 종목이 사라졌다", c.moveToFirst())
+                    assertEquals("벤치 프레스", c.getString(0))
+                    assertEquals("메모가 날아갔다", "5x5", c.getString(1))
+                }
+                db.query(
+                    "SELECT setIndex, weightKg, reps FROM routine_set " +
+                        "WHERE routineExerciseId = 5 ORDER BY setIndex"
+                ).use { c ->
+                    var rows = 0
+                    while (c.moveToNext()) {
+                        assertEquals("세트 번호가 어긋났다", rows, c.getInt(0))
+                        assertEquals(62.5, c.getDouble(1), 0.001)
+                        assertEquals(8, c.getInt(2))
+                        rows++
+                    }
+                    assertEquals(
+                        "옛 기본값이 세트로 안 펴졌다 (CASCADE로 지워졌을 수 있다)",
+                        SeedData.DEFAULT_SET_COUNT,
+                        rows
+                    )
+                }
+            }
+    }
+
     @Test
     fun 선언한_버전과_실제_DB_버전이_같다() {
         val db = helper.createDatabase(TEST_DB, AppDatabase.VERSION)

@@ -14,7 +14,9 @@ import com.pkj.leanbulk.data.TrackingType
 import com.pkj.leanbulk.data.Macros
 import com.pkj.leanbulk.data.MealEntry
 import com.pkj.leanbulk.data.RoutineExercise
+import com.pkj.leanbulk.data.RoutineSet
 import com.pkj.leanbulk.data.RoutineWithExercises
+import com.pkj.leanbulk.data.SeedData
 import com.pkj.leanbulk.data.WorkoutExercise
 import com.pkj.leanbulk.data.WorkoutSet
 import kotlinx.serialization.json.Json
@@ -70,8 +72,7 @@ object SnapshotCodec {
         bodyPart = bodyPart,
         equipment = equipment,
         trackingType = trackingType.name,
-        source = source.name,
-        hidden = hidden
+        source = source.name
     )
 
     /**
@@ -108,15 +109,20 @@ object SnapshotCodec {
     fun RoutineWithExercises.toDto(slugById: Map<Long, String>) = RoutineDto(
         name = routine.name,
         orderIndex = routine.orderIndex,
-        exercises = exercises.sortedBy { it.orderIndex }.map {
+        exercises = exercises.sortedBy { it.exercise.orderIndex }.map { item ->
+            val sets = item.sets.sortedBy { it.setIndex }
             RoutineExerciseDto(
-                orderIndex = it.orderIndex,
-                exerciseSlug = it.exerciseId?.let { id -> slugById[id] },
-                exerciseName = it.exerciseName,
-                trackingType = it.trackingType.name,
-                defaultSetting = it.defaultSetting,
-                defaultWeight = it.defaultWeight,
-                defaultReps = it.defaultReps
+                orderIndex = item.exercise.orderIndex,
+                exerciseSlug = item.exercise.exerciseId?.let { id -> slugById[id] },
+                exerciseName = item.exercise.exerciseName,
+                trackingType = item.exercise.trackingType.name,
+                defaultSetting = item.exercise.defaultSetting,
+                // 구버전 앱이 읽을 때를 위한 값. 지금 앱은 아래 sets만 본다.
+                defaultWeight = sets.firstOrNull()?.weightKg ?: 0.0,
+                defaultReps = sets.firstOrNull()?.reps ?: 0,
+                sets = sets.map {
+                    RoutineSetDto(it.setIndex, it.weightKg, it.reps, it.durationSec, it.distanceM)
+                }
             )
         }
     )
@@ -177,8 +183,7 @@ object SnapshotCodec {
         bodyPart = bodyPart,
         equipment = equipment,
         trackingType = trackingTypeOf(trackingType),
-        source = runCatching { ItemSource.valueOf(source) }.getOrDefault(ItemSource.USER),
-        hidden = hidden
+        source = runCatching { ItemSource.valueOf(source) }.getOrDefault(ItemSource.USER)
     )
 
     /**
@@ -209,16 +214,48 @@ object SnapshotCodec {
             }
         }
 
-    fun RoutineExerciseDto.toEntity(routineId: Long, idBySlug: Map<String, Long>) = RoutineExercise(
-        routineId = routineId,
-        orderIndex = orderIndex,
-        exerciseId = exerciseSlug?.let { idBySlug[it] },
-        exerciseName = exerciseName,
-        trackingType = trackingTypeOf(trackingType),
-        defaultSetting = defaultSetting,
-        defaultWeight = defaultWeight,
-        defaultReps = defaultReps
-    )
+    /**
+     * 루틴 종목 + 세트로 되돌린다.
+     *
+     * `sets`가 비어 있으면 **세트를 담지 못하던 시절의 백업**이다. 그때는 기본값 한 쌍으로
+     * 세트 [SeedData.DEFAULT_SET_COUNT]개를 폈으므로, 그 파일을 읽을 때도 같은 모양으로 편다.
+     */
+    fun RoutineExerciseDto.toEntityPair(
+        routineId: Long,
+        idBySlug: Map<String, Long>
+    ): Pair<RoutineExercise, List<RoutineSet>> {
+        val exercise = RoutineExercise(
+            routineId = routineId,
+            orderIndex = orderIndex,
+            exerciseId = exerciseSlug?.let { idBySlug[it] },
+            exerciseName = exerciseName,
+            trackingType = trackingTypeOf(trackingType),
+            defaultSetting = defaultSetting
+        )
+        val restored = sets
+            .sortedBy { it.setIndex }
+            .map {
+                RoutineSet(
+                    routineExerciseId = 0,
+                    setIndex = it.setIndex,
+                    weightKg = it.weightKg,
+                    reps = it.reps,
+                    durationSec = it.durationSec,
+                    distanceM = it.distanceM
+                )
+            }
+            .ifEmpty {
+                List(SeedData.DEFAULT_SET_COUNT) { index ->
+                    RoutineSet(
+                        routineExerciseId = 0,
+                        setIndex = index,
+                        weightKg = defaultWeight,
+                        reps = defaultReps
+                    )
+                }
+            }
+        return exercise to restored
+    }
 
     fun DietTemplateMealDto.toEntity(templateId: Long) = DietTemplateMeal(
         templateId = templateId,

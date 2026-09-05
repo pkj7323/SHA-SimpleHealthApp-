@@ -183,11 +183,11 @@ interface DietTargetDao {
 @Dao
 interface ExerciseDao {
 
-    /** 종목 선택 목록용. 숨긴 건 빼고 보여준다. */
-    @Query("SELECT * FROM exercise WHERE hidden = 0 ORDER BY bodyPart, name")
-    fun observeVisible(): Flow<List<Exercise>>
+    /** 종목 선택 목록용. */
+    @Query("SELECT * FROM exercise ORDER BY bodyPart, name")
+    fun observeAll(): Flow<List<Exercise>>
 
-    /** 백업 내보내기용. 숨긴 것도 포함해야 복원했을 때 숨김 상태가 유지된다. */
+    /** 백업 내보내기용. */
     @Query("SELECT * FROM exercise ORDER BY slug")
     suspend fun getAll(): List<Exercise>
 
@@ -203,9 +203,6 @@ interface ExerciseDao {
     @Update
     suspend fun update(exercise: Exercise)
 
-    @Query("UPDATE exercise SET hidden = :hidden WHERE id = :id")
-    suspend fun setHidden(id: Long, hidden: Boolean)
-
     @Query("DELETE FROM exercise")
     suspend fun deleteAll()
 
@@ -215,9 +212,7 @@ interface ExerciseDao {
      * SQLite UPSERT(`ON CONFLICT ... DO UPDATE`)는 3.24+가 필요한데 minSdk 26은 3.19라
      * 못 쓴다. 그래서 조회 후 분기한다.
      *
-     * 지키는 것 두 가지:
-     * - 사용자가 직접 만든 항목(`source = USER`)은 slug가 겹쳐도 **덮어쓰지 않는다**
-     * - 사용자가 숨긴 상태([Exercise.hidden])는 갱신해도 **그대로 둔다**
+     * 지키는 것: 사용자가 직접 만든 항목(`source = USER`)은 slug가 겹쳐도 **덮어쓰지 않는다**.
      */
     @Transaction
     suspend fun upsertSeed(seed: Exercise) {
@@ -337,6 +332,15 @@ interface RoutineDao {
     @Query("SELECT COUNT(*) FROM routine")
     suspend fun count(): Int
 
+    /**
+     * 같은 이름의 다른 루틴이 있는지. 이름은 사용자가 루틴을 알아보는 유일한 단서라
+     * 겹치면 목록에서 어느 쪽인지 구분할 방법이 없다.
+     *
+     * [exceptId]는 이름 수정 때 자기 자신을 빼기 위한 것이다.
+     */
+    @Query("SELECT COUNT(*) FROM routine WHERE name = :name AND id != :exceptId")
+    suspend fun countByName(name: String, exceptId: Long = 0): Int
+
     /** 자식(routine_exercise)은 외래키 CASCADE로 같이 지워진다. */
     @Query("DELETE FROM routine")
     suspend fun deleteAll()
@@ -350,6 +354,29 @@ interface RoutineDao {
     @Insert
     suspend fun insertExercises(exercises: List<RoutineExercise>)
 
+    @Insert
+    suspend fun insertExercise(exercise: RoutineExercise): Long
+
+    @Insert
+    suspend fun insertSets(sets: List<RoutineSet>)
+
+    /**
+     * 종목과 그 세트를 함께 넣는다. 세트는 부모 id를 알아야 하므로 종목을 하나씩 넣고
+     * 돌려받은 id를 붙인다.
+     */
+    @Transaction
+    suspend fun insertExercisesWithSets(
+        routineId: Long,
+        exercises: List<Pair<RoutineExercise, List<RoutineSet>>>
+    ) {
+        exercises.forEach { (exercise, sets) ->
+            val id = insertExercise(exercise.copy(id = 0, routineId = routineId))
+            if (sets.isNotEmpty()) {
+                insertSets(sets.map { it.copy(id = 0, routineExerciseId = id) })
+            }
+        }
+    }
+
     @Query("UPDATE routine SET name = :name WHERE id = :routineId")
     suspend fun rename(routineId: Long, name: String)
 
@@ -357,11 +384,26 @@ interface RoutineDao {
     suspend fun delete(routineId: Long)
 
     @Transaction
-    suspend fun insertWithExercises(name: String, exercises: List<RoutineExercise>) {
+    suspend fun insertWithExercises(
+        name: String,
+        exercises: List<Pair<RoutineExercise, List<RoutineSet>>>
+    ) {
         val id = insertRoutine(Routine(name = name, orderIndex = nextOrderIndex()))
-        if (exercises.isNotEmpty()) {
-            insertExercises(exercises.map { it.copy(id = 0, routineId = id) })
-        }
+        insertExercisesWithSets(id, exercises)
+    }
+
+    /** 세트(`routine_set`)는 외래키 CASCADE로 같이 지워진다. */
+    @Query("DELETE FROM routine_exercise WHERE routineId = :routineId")
+    suspend fun deleteExercises(routineId: Long)
+
+    /** 지금 화면의 종목 구성을 기존 루틴에 덮어써서 저장한다. */
+    @Transaction
+    suspend fun replaceExercises(
+        routineId: Long,
+        exercises: List<Pair<RoutineExercise, List<RoutineSet>>>
+    ) {
+        deleteExercises(routineId)
+        insertExercisesWithSets(routineId, exercises)
     }
 }
 

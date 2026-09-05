@@ -12,6 +12,7 @@ import com.pkj.leanbulk.data.Macros
 import com.pkj.leanbulk.data.MealEntry
 import com.pkj.leanbulk.data.Routine
 import com.pkj.leanbulk.data.RoutineExercise
+import com.pkj.leanbulk.data.RoutineSet
 import com.pkj.leanbulk.data.WorkoutExercise
 import com.pkj.leanbulk.data.WorkoutSet
 import org.junit.Assert.assertEquals
@@ -48,7 +49,10 @@ class SnapshotCompletenessTest {
         assertFields<Routine>("id", "name", "orderIndex")
         assertFields<RoutineExercise>(
             "id", "routineId", "orderIndex", "exerciseId", "exerciseName", "trackingType",
-            "defaultSetting", "defaultWeight", "defaultReps"
+            "defaultSetting"
+        )
+        assertFields<RoutineSet>(
+            "id", "routineExerciseId", "setIndex", "weightKg", "reps", "durationSec", "distanceM"
         )
 
         assertFields<DietTemplate>("id", "name", "orderIndex")
@@ -59,7 +63,7 @@ class SnapshotCompletenessTest {
         )
         assertFields<AppMeta>("id", "seedVersion")
         assertFields<Exercise>(
-            "id", "slug", "name", "bodyPart", "equipment", "trackingType", "source", "hidden"
+            "id", "slug", "name", "bodyPart", "equipment", "trackingType", "source"
         )
         assertFields<DietTarget>(
             "id", "kcal", "protein", "carbs", "fat", "sugar", "goal", "activityLevel"

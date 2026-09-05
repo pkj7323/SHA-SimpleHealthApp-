@@ -108,7 +108,7 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
     val foods: StateFlow<List<FoodItem>> =
         repository.observeFoods().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** 종목 선택 목록. 사용자가 숨긴 건 빠져 있다. */
+    /** 종목 선택 목록. */
     val exercises: StateFlow<List<Exercise>> =
         repository.observeExercises().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -179,18 +179,63 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
 
     fun loadRoutine(routine: RoutineWithExercises) {
         _routineName.value = routine.routine.name
-        _workoutDraft.value = routine.exercises.sortedBy { it.orderIndex }.map { it.toDraft() }
+        _workoutDraft.value = routine.exercises.sortedBy { it.exercise.orderIndex }.map { it.toDraft() }
         scheduleWorkoutSave()
     }
 
+    /**
+     * 빈 루틴을 만든다.
+     *
+     * 이름이 겹치면 만들지 않는다 — 목록에 같은 이름이 둘 있으면 어느 쪽을 고르는 건지
+     * 알 수 없다. 덮어쓰려는 것이라면 [overwriteRoutine]이 따로 있다.
+     */
     fun addRoutine(name: String) {
-        if (name.isBlank()) return
-        viewModelScope.launch { repository.addRoutine(name.trim()) }
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch {
+            if (repository.routineNameExists(trimmed)) {
+                _toast.value = "'$trimmed' 루틴이 이미 있습니다"
+                return@launch
+            }
+            repository.addRoutine(trimmed)
+        }
+    }
+
+    /** 지금 화면의 종목 구성을 새 루틴으로 저장한다. 이름이 겹치면 거절한다([addRoutine]과 같은 이유). */
+    fun saveCurrentAsRoutine(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank() || _workoutDraft.value.isEmpty()) return
+        viewModelScope.launch {
+            if (repository.routineNameExists(trimmed)) {
+                _toast.value = "'$trimmed' 루틴이 이미 있습니다"
+                return@launch
+            }
+            repository.saveAsNewRoutine(trimmed, _workoutDraft.value.toRoutineExercises())
+            _routineName.value = trimmed
+            _toast.value = "루틴 '$trimmed' 저장됨"
+        }
+    }
+
+    /** 지금 화면의 종목 구성으로 기존 루틴을 덮어쓴다. */
+    fun overwriteRoutine(routineId: Long, routineName: String) {
+        if (_workoutDraft.value.isEmpty()) return
+        viewModelScope.launch {
+            repository.overwriteRoutine(routineId, _workoutDraft.value.toRoutineExercises())
+            _routineName.value = routineName
+            _toast.value = "루틴 '$routineName' 갱신됨"
+        }
     }
 
     fun renameRoutine(routineId: Long, name: String) {
-        if (name.isBlank()) return
-        viewModelScope.launch { repository.renameRoutine(routineId, name.trim()) }
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch {
+            if (repository.routineNameExists(trimmed, exceptId = routineId)) {
+                _toast.value = "'$trimmed' 루틴이 이미 있습니다"
+                return@launch
+            }
+            repository.renameRoutine(routineId, trimmed)
+        }
     }
 
     fun deleteRoutine(routineId: Long) {
@@ -216,13 +261,22 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
         }
     }
 
-    /** 목록에서 안 보이게 치운다. 지우면 시드 갱신 때 되살아나므로 숨김으로 처리한다. */
-    fun hideExercise(id: Long) {
-        viewModelScope.launch { repository.hideExercise(id) }
-    }
-
     fun removeExercise(index: Int) {
         _workoutDraft.value = _workoutDraft.value.filterIndexed { i, _ -> i != index }
+        scheduleWorkoutSave()
+    }
+
+    /**
+     * 종목 순서를 한 칸 옮긴다.
+     *
+     * 추가는 항상 맨 아래에 붙으므로, 원하는 자리로 **끌어올리는 수단**이 없으면
+     * 중간에 넣을 방법이 아예 없다. 저장할 때 `orderIndex`는 리스트 순서에서
+     * 다시 매겨지므로([toPersistables]) 여기서는 리스트만 바꾸면 된다.
+     */
+    fun moveExercise(from: Int, to: Int) {
+        val current = _workoutDraft.value
+        if (from !in current.indices || to !in current.indices || from == to) return
+        _workoutDraft.value = current.toMutableList().apply { add(to, removeAt(from)) }
         scheduleWorkoutSave()
     }
 

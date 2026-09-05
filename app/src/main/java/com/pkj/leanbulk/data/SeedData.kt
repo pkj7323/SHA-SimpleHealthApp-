@@ -11,12 +11,20 @@ data class MealTemplate(
     val sugar: Double?
 )
 
-/** 루틴에 들어가는 종목 하나의 기본값. */
+/**
+ * 루틴에 들어가는 종목 하나의 기본값.
+ *
+ * [setCount]는 [defaultSetting] 글에 적힌 세트 수를 숫자로 옮긴 것이다. 글에서 자동으로
+ * 뽑지 않는 이유는 "양쪽 3세트", "1~2세트 (허리 뜨면 중단)"처럼 형태가 제각각이라
+ * 파싱이 조용히 틀리기 쉬워서다. **범위로 적힌 것은 적은 쪽**을 쓴다 — 모자라면 화면에서
+ * 세트를 더하면 되지만, 많으면 지워야 한다.
+ */
 data class ExerciseTemplate(
     val exerciseName: String,
     val defaultSetting: String,
     val defaultWeight: Double,
-    val defaultReps: Int
+    val defaultReps: Int,
+    val setCount: Int = SeedData.DEFAULT_SET_COUNT
 )
 
 /** 하나의 운동 루틴(= 기존 Day 1~4 같은 분할). 사용자가 직접 골라서 불러온다. */
@@ -262,55 +270,55 @@ object SeedData {
         RoutineTemplate(
             "가슴 & 삼두 & 코어",
             listOf(
-                ExerciseTemplate("시티드 프레스 머신 (견갑 예열)", "20kg / 20회 / 2세트", 20.0, 20),
-                ExerciseTemplate("스탠딩 페이스풀", "15kg / 15회 / 3세트", 15.0, 15),
-                ExerciseTemplate("벤치 프레스 머신 (다리 올림)", "40kg / 12회 / 4세트", 40.0, 12),
-                ExerciseTemplate("인클라인 덤벨 프레스 (벤치 30도)", "12~14kg / 12회 / 3세트", 13.0, 12),
-                ExerciseTemplate("90도 플라이 머신", "30kg / 12~15회 / 3세트", 30.0, 12),
-                ExerciseTemplate("케이블 푸시다운 (이지바)", "35kg / 12회 / 3세트", 35.0, 12),
-                ExerciseTemplate("케이블 오버헤드 익스텐션 (로프)", "15kg / 10~12회 / 3세트", 15.0, 12),
-                ExerciseTemplate("수트케이스 캐리", "한 손 16~20kg / 30~40초 / 양쪽 3세트", 18.0, 1),
-                ExerciseTemplate("크런치", "12회 / 2~3세트", 0.0, 12),
-                ExerciseTemplate("레그레이즈", "10회 / 1~2세트 (허리 뜨면 중단)", 0.0, 10)
+                ExerciseTemplate("시티드 프레스 머신 (견갑 예열)", "20kg / 20회 / 2세트", 20.0, 20, 2),
+                ExerciseTemplate("스탠딩 페이스풀", "15kg / 15회 / 3세트", 15.0, 15, 3),
+                ExerciseTemplate("벤치 프레스 머신 (다리 올림)", "40kg / 12회 / 4세트", 40.0, 12, 4),
+                ExerciseTemplate("인클라인 덤벨 프레스 (벤치 30도)", "12~14kg / 12회 / 3세트", 13.0, 12, 3),
+                ExerciseTemplate("90도 플라이 머신", "30kg / 12~15회 / 3세트", 30.0, 12, 3),
+                ExerciseTemplate("케이블 푸시다운 (이지바)", "35kg / 12회 / 3세트", 35.0, 12, 3),
+                ExerciseTemplate("케이블 오버헤드 익스텐션 (로프)", "15kg / 10~12회 / 3세트", 15.0, 12, 3),
+                ExerciseTemplate("수트케이스 캐리", "한 손 16~20kg / 30~40초 / 양쪽 3세트", 18.0, 1, 3),
+                ExerciseTemplate("크런치", "12회 / 2~3세트", 0.0, 12, 2),
+                ExerciseTemplate("레그레이즈", "10회 / 1~2세트 (허리 뜨면 중단)", 0.0, 10, 1)
             )
         ),
         RoutineTemplate(
             "등 & 후면 & 코어",
             listOf(
-                ExerciseTemplate("시티드 랫풀다운 (견갑 예열)", "20~25kg / 20회 / 2세트", 22.0, 20),
-                ExerciseTemplate("스탠딩 페이스풀", "15kg / 12~15회 / 3세트", 15.0, 12),
-                ExerciseTemplate("스미스 머신 바벨 로우", "25kg / 10~12회 / 4세트", 25.0, 12),
-                ExerciseTemplate("랫 풀 다운", "45kg / 12회 / 4세트", 45.0, 12),
-                ExerciseTemplate("암 풀 다운 (이지바)", "30~35kg / 10~12회 / 3세트", 32.0, 12),
-                ExerciseTemplate("원암 덤벨 로우", "12~14kg / 10회 / 3세트", 13.0, 10),
-                ExerciseTemplate("팔로프 프레스", "10~15kg / 10~12회 / 양쪽 3세트", 12.0, 12),
-                ExerciseTemplate("크런치", "12회 / 3세트", 0.0, 12),
-                ExerciseTemplate("레그레이즈", "10회 / 1세트 (허리 뜨면 중단)", 0.0, 10)
+                ExerciseTemplate("시티드 랫풀다운 (견갑 예열)", "20~25kg / 20회 / 2세트", 22.0, 20, 2),
+                ExerciseTemplate("스탠딩 페이스풀", "15kg / 12~15회 / 3세트", 15.0, 12, 3),
+                ExerciseTemplate("스미스 머신 바벨 로우", "25kg / 10~12회 / 4세트", 25.0, 12, 4),
+                ExerciseTemplate("랫 풀 다운", "45kg / 12회 / 4세트", 45.0, 12, 4),
+                ExerciseTemplate("암 풀 다운 (이지바)", "30~35kg / 10~12회 / 3세트", 32.0, 12, 3),
+                ExerciseTemplate("원암 덤벨 로우", "12~14kg / 10회 / 3세트", 13.0, 10, 3),
+                ExerciseTemplate("팔로프 프레스", "10~15kg / 10~12회 / 양쪽 3세트", 12.0, 12, 3),
+                ExerciseTemplate("크런치", "12회 / 3세트", 0.0, 12, 3),
+                ExerciseTemplate("레그레이즈", "10회 / 1세트 (허리 뜨면 중단)", 0.0, 10, 1)
             )
         ),
         RoutineTemplate(
             "어깨 & 코어",
             listOf(
-                ExerciseTemplate("시티드 프레스 머신 (견갑 예열)", "15~20kg / 20회 / 2세트", 17.0, 20),
-                ExerciseTemplate("스탠딩 페이스풀", "15kg / 15회 / 2~3세트", 15.0, 15),
-                ExerciseTemplate("시티드 덤벨 숄더 프레스 (80도)", "14kg / 12회 / 3세트", 14.0, 12),
-                ExerciseTemplate("덤벨 사이드 레터럴 레이즈", "6kg / 15회 / 3~4세트", 6.0, 15),
-                ExerciseTemplate("인클라인 체스트 서포트 덤벨 플라이", "7kg / 12~15회 / 3~4세트", 7.0, 12),
-                ExerciseTemplate("캡틴체어 니레이즈", "12~15회 / 3세트", 0.0, 12),
-                ExerciseTemplate("수트케이스 캐리", "한 손 16~20kg / 30~40초 / 양쪽 2~3세트", 18.0, 1)
+                ExerciseTemplate("시티드 프레스 머신 (견갑 예열)", "15~20kg / 20회 / 2세트", 17.0, 20, 2),
+                ExerciseTemplate("스탠딩 페이스풀", "15kg / 15회 / 2~3세트", 15.0, 15, 2),
+                ExerciseTemplate("시티드 덤벨 숄더 프레스 (80도)", "14kg / 12회 / 3세트", 14.0, 12, 3),
+                ExerciseTemplate("덤벨 사이드 레터럴 레이즈", "6kg / 15회 / 3~4세트", 6.0, 15, 3),
+                ExerciseTemplate("인클라인 체스트 서포트 덤벨 플라이", "7kg / 12~15회 / 3~4세트", 7.0, 12, 3),
+                ExerciseTemplate("캡틴체어 니레이즈", "12~15회 / 3세트", 0.0, 12, 3),
+                ExerciseTemplate("수트케이스 캐리", "한 손 16~20kg / 30~40초 / 양쪽 2~3세트", 18.0, 1, 2)
             )
         ),
         RoutineTemplate(
             "하체 & 코어",
             listOf(
-                ExerciseTemplate("시티드 레그 익스텐션 (예열)", "20kg / 20회 / 2세트", 20.0, 20),
-                ExerciseTemplate("바벨 힙 쓰러스트", "20~40kg / 10~12회 / 3세트", 30.0, 12),
-                ExerciseTemplate("레그 프레스", "50kg / 12회 / 4세트 (허리 뜨기 직전까지만)", 50.0, 12),
-                ExerciseTemplate("레그 익스텐션", "50kg / 12~13회 / 4세트", 50.0, 12),
-                ExerciseTemplate("라잉 레그 컬", "40~45kg / 12회 / 3~4세트", 42.0, 12),
-                ExerciseTemplate("시티드 레그 컬", "가벼운 무게 / 12~15회 / 2~3세트", 0.0, 12),
-                ExerciseTemplate("불가리안 스플릿 스쿼트", "덤벨 6~8kg / 8~10회 / 3세트", 7.0, 10),
-                ExerciseTemplate("수트케이스 캐리", "한 손 16~20kg / 30~40초 / 양쪽 2~3세트", 18.0, 1)
+                ExerciseTemplate("시티드 레그 익스텐션 (예열)", "20kg / 20회 / 2세트", 20.0, 20, 2),
+                ExerciseTemplate("바벨 힙 쓰러스트", "20~40kg / 10~12회 / 3세트", 30.0, 12, 3),
+                ExerciseTemplate("레그 프레스", "50kg / 12회 / 4세트 (허리 뜨기 직전까지만)", 50.0, 12, 4),
+                ExerciseTemplate("레그 익스텐션", "50kg / 12~13회 / 4세트", 50.0, 12, 4),
+                ExerciseTemplate("라잉 레그 컬", "40~45kg / 12회 / 3~4세트", 42.0, 12, 3),
+                ExerciseTemplate("시티드 레그 컬", "가벼운 무게 / 12~15회 / 2~3세트", 0.0, 12, 2),
+                ExerciseTemplate("불가리안 스플릿 스쿼트", "덤벨 6~8kg / 8~10회 / 3세트", 7.0, 10, 3),
+                ExerciseTemplate("수트케이스 캐리", "한 손 16~20kg / 30~40초 / 양쪽 2~3세트", 18.0, 1, 2)
             )
         ),
         RoutineTemplate("빈 루틴 (직접 추가)", emptyList())

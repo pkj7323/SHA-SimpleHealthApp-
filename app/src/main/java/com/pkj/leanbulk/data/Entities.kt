@@ -181,14 +181,7 @@ data class Exercise(
     /** 바벨 / 덤벨 / 머신 / 케이블 / 맨몸 / 기타 */
     val equipment: String,
     val trackingType: TrackingType,
-    val source: ItemSource,
-    /**
-     * 사용자가 안 쓰겠다고 치운 종목.
-     *
-     * **지우지 않고 숨기는 이유**: SEED 항목을 정말로 삭제하면 다음 시드 실행 때
-     * slug upsert로 되살아난다. 숨김 상태는 시드 갱신이 건드리지 않는다.
-     */
-    val hidden: Boolean = false
+    val source: ItemSource
 )
 
 /** 하루 운동에 포함된 종목 하나. 세트는 workout_set 테이블에 따로 저장된다. */
@@ -266,7 +259,14 @@ data class Routine(
     val orderIndex: Int
 )
 
-/** 루틴에 속한 종목 템플릿. 루틴을 불러오면 이 값들로 세트가 채워진다. */
+/**
+ * 루틴에 속한 종목 템플릿. 세트는 [RoutineSet]에 따로 있다.
+ *
+ * 예전에는 여기 `defaultWeight`/`defaultReps` 한 쌍만 두고 루틴을 불러올 때 그 값으로
+ * 똑같은 세트 세 개를 만들었다. 그래서 **세트 수도, 세트마다 다른 무게도 못 담았다** —
+ * 55kg 워밍업 + 60kg 세 세트로 저장해도 불러오면 55kg 세 세트가 됐다.
+ * 오늘의 기록(`workout_exercise` + `workout_set`)과 같은 모양으로 맞췄다.
+ */
 @Entity(
     tableName = "routine_exercise",
     foreignKeys = [
@@ -287,15 +287,43 @@ data class RoutineExercise(
     val exerciseName: String,
     @ColumnInfo(defaultValue = "WEIGHT_REPS")
     val trackingType: TrackingType = TrackingType.WEIGHT_REPS,
-    val defaultSetting: String,
-    val defaultWeight: Double,
-    val defaultReps: Int
+    val defaultSetting: String
+)
+
+/** 루틴 종목의 세트 하나. `workout_set`과 같은 칸을 쓰되 완료 여부(`done`)는 없다. */
+@Entity(
+    tableName = "routine_set",
+    foreignKeys = [
+        ForeignKey(
+            entity = RoutineExercise::class,
+            parentColumns = ["id"],
+            childColumns = ["routineExerciseId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index(value = ["routineExerciseId"])]
+)
+data class RoutineSet(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val routineExerciseId: Long,
+    val setIndex: Int,
+    val weightKg: Double,
+    val reps: Int,
+    val durationSec: Int? = null,
+    val distanceM: Double? = null
+)
+
+/** 루틴 종목 + 그 세트들. */
+data class RoutineExerciseWithSets(
+    @androidx.room.Embedded val exercise: RoutineExercise,
+    @Relation(parentColumn = "id", entityColumn = "routineExerciseId")
+    val sets: List<RoutineSet>
 )
 
 data class RoutineWithExercises(
     @androidx.room.Embedded val routine: Routine,
-    @Relation(parentColumn = "id", entityColumn = "routineId")
-    val exercises: List<RoutineExercise>
+    @Relation(entity = RoutineExercise::class, parentColumn = "id", entityColumn = "routineId")
+    val exercises: List<RoutineExerciseWithSets>
 )
 
 /** 2주 간격 체성분 측정 기록. */

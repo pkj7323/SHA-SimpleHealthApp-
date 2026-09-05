@@ -601,29 +601,3 @@ private val ActivityLevel.label: String
         ActivityLevel.HIGH -> "많음"
     }
 
-@Composable
-private fun TextInputDialog(
-    title: String,
-    label: String,
-    initial: String,
-    confirmText: String,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var text by remember { mutableStateOf(initial) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                label = { Text(label) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = { TextButton(onClick = { onConfirm(text) }) { Text(confirmText) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
-    )
-}

@@ -91,11 +91,30 @@ class SeedVersionTest {
         // 시드 루틴의 종목명이 카탈로그 이름과 같으므로 전부 연결돼야 한다.
         val unlinked = repo.observeRoutines().first()
             .flatMap { it.exercises }
+            .map { it.exercise }
             .filter { it.exerciseId == null }
         assertTrue(
             "카탈로그에 못 붙은 루틴 종목이 있다: ${unlinked.map { it.exerciseName }}",
             unlinked.isEmpty()
         )
+    }
+
+    /**
+     * 시드 루틴의 세트 수가 `defaultSetting` 글과 맞아야 한다.
+     *
+     * 예전에는 무엇을 적어놨든 불러오면 전부 세 세트로 펴졌다.
+     */
+    @Test
+    fun 시드_루틴이_적힌_세트_수를_그대로_갖는다() = runBlocking<Unit> {
+        repo.applySeeds()
+
+        val chest = repo.observeRoutines().first().first { it.routine.name == "가슴 & 삼두 & 코어" }
+        val bench = chest.exercises.first { it.exercise.exerciseName == "벤치 프레스 머신 (다리 올림)" }
+        assertEquals("'40kg / 12회 / 4세트'인데 세트 수가 다르다", 4, bench.sets.size)
+        assertEquals(listOf(40.0, 40.0, 40.0, 40.0), bench.sets.map { it.weightKg })
+
+        val warmup = chest.exercises.first { it.exercise.exerciseName == "시티드 프레스 머신 (견갑 예열)" }
+        assertEquals("'20kg / 20회 / 2세트'인데 세트 수가 다르다", 2, warmup.sets.size)
     }
 
     /** 시간형 종목을 고르면 추적 방식이 따라와야 입력 칸이 바뀐다. */
@@ -105,6 +124,7 @@ class SeedVersionTest {
 
         val carry = repo.observeRoutines().first()
             .flatMap { it.exercises }
+            .map { it.exercise }
             .firstOrNull { it.exerciseName == "수트케이스 캐리" }
 
         assertTrue("수트케이스 캐리가 시드 루틴에 있어야 한다", carry != null)
@@ -120,28 +140,6 @@ class SeedVersionTest {
         repo.applySeeds()
 
         assertEquals("카탈로그가 중복으로 쌓였다", afterFirst, repo.observeExercises().first().size)
-    }
-
-    /**
-     * 숨김이 필요한 이유를 못 박는다. SEED 항목은 지워도 다음 시드 실행 때 slug로
-     * 되살아나므로, 숨김 상태가 유지돼야 사용자가 치운 종목이 다시 안 나타난다.
-     */
-    @Test
-    fun 숨긴_종목은_시드를_다시_돌려도_숨은_채로_있다() = runBlocking {
-        repo.applySeeds()
-        val target = repo.observeExercises().first().first()
-        repo.hideExercise(target.id)
-
-        val afterHide = repo.observeExercises().first()
-        assertTrue("숨긴 종목이 목록에서 빠져야 한다", afterHide.none { it.id == target.id })
-
-        db.appMetaDao().upsert(AppMeta(seedVersion = 0))
-        repo.applySeeds()
-
-        assertTrue(
-            "숨긴 종목이 시드 갱신으로 되살아났다",
-            repo.observeExercises().first().none { it.id == target.id }
-        )
     }
 
     @Test

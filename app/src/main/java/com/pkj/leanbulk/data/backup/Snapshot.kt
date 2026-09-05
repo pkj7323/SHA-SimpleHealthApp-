@@ -74,6 +74,9 @@ data class WorkoutDayDto(
  *
  * 열거형을 문자열로 싣는 이유: 나중 버전이 추적 방식을 추가해도 **구버전 앱이 그 파일을
  * 읽다가 죽지 않게** 하기 위함이다. 모르는 값은 기본값으로 떨어뜨린다.
+ *
+ * 예전엔 `hidden`이 있었다(종목 숨기기 기능). 기능을 없애면서 빠졌는데, 옛 백업의
+ * `hidden` 키는 `ignoreUnknownKeys`가 그냥 흘려보내므로 예전 파일도 계속 읽힌다.
  */
 @Serializable
 data class ExerciseDto(
@@ -82,8 +85,7 @@ data class ExerciseDto(
     val bodyPart: String,
     val equipment: String,
     val trackingType: String,
-    val source: String,
-    val hidden: Boolean = false
+    val source: String
 )
 
 @Serializable
@@ -119,6 +121,13 @@ data class RoutineDto(
     val exercises: List<RoutineExerciseDto> = emptyList()
 )
 
+/**
+ * 루틴에 든 종목 하나.
+ *
+ * [sets]가 실제 내용이다. [defaultWeight]/[defaultReps]는 **세트를 담지 못하던 시절의 잔재**로,
+ * 옛 백업을 읽을 때만 쓴다(그 파일엔 `sets`가 없으므로 이 값으로 세트를 펴 준다).
+ * 내보낼 때는 첫 세트 값을 넣어 둔다 — 구버전 앱이 이 파일을 읽어도 루틴이 비어 보이지 않게.
+ */
 @Serializable
 data class RoutineExerciseDto(
     val orderIndex: Int,
@@ -127,7 +136,18 @@ data class RoutineExerciseDto(
     val trackingType: String = "WEIGHT_REPS",
     val defaultSetting: String,
     val defaultWeight: Double,
-    val defaultReps: Int
+    val defaultReps: Int,
+    val sets: List<RoutineSetDto> = emptyList()
+)
+
+/** 루틴 종목의 세트. 완료 여부가 없다는 점만 [WorkoutSetDto]와 다르다. */
+@Serializable
+data class RoutineSetDto(
+    val setIndex: Int,
+    val weightKg: Double,
+    val reps: Int,
+    val durationSec: Int? = null,
+    val distanceM: Double? = null
 )
 
 @Serializable

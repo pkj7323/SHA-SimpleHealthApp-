@@ -99,13 +99,16 @@ class SelectiveMergeTest {
         assertEquals(beforeCatalog + 1, repo.observeExercises().first().size)
 
         val merged = repo.observeRoutines().first().first { it.routine.name == "남의 루틴" }
-        val theirs = merged.exercises.first { it.exerciseName == theirExercise.name }
+        val theirs = merged.exercises.first { it.exercise.exerciseName == theirExercise.name }.exercise
         assertNotNull("딸려온 종목이 카탈로그에 연결돼야 한다", theirs.exerciseId)
         assertEquals("추적 방식이 날아갔다", TrackingType.TIME, theirs.trackingType)
 
         // 내게 이미 있던 종목은 새로 만들지 않고 내 것을 쓴다.
         val myPlankId = repo.observeExercises().first().first { it.slug == "plank" }.id
-        assertEquals(myPlankId, merged.exercises.first { it.exerciseName == "플랭크" }.exerciseId)
+        assertEquals(
+            myPlankId,
+            merged.exercises.first { it.exercise.exerciseName == "플랭크" }.exercise.exerciseId
+        )
     }
 
     /** 병합은 더하기지 갈아엎기가 아니다. */

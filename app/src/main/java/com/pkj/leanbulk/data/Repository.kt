@@ -8,6 +8,7 @@ import com.pkj.leanbulk.data.backup.Snapshot
 import com.pkj.leanbulk.data.backup.SnapshotCodec
 import com.pkj.leanbulk.data.backup.SnapshotCodec.toDto
 import com.pkj.leanbulk.data.backup.SnapshotCodec.toEntity
+import com.pkj.leanbulk.data.backup.SnapshotCodec.toEntityPair
 import com.pkj.leanbulk.data.backup.SnapshotCodec.toEntityPairs
 import com.pkj.leanbulk.data.backup.SnapshotCodec.toWorkoutDayDtos
 import kotlinx.coroutines.flow.Flow
@@ -71,7 +72,7 @@ class Repository(private val db: AppDatabase) {
 
     // ---------- 종목 카탈로그 ----------
 
-    fun observeExercises(): Flow<List<Exercise>> = exerciseDao.observeVisible()
+    fun observeExercises(): Flow<List<Exercise>> = exerciseDao.observeAll()
 
     /** 카탈로그에 없는 종목을 사용자가 직접 등록한다. 이후 검색 목록에 계속 남는다. */
     suspend fun addUserExercise(
@@ -92,8 +93,6 @@ class Repository(private val db: AppDatabase) {
         )
         return entity.copy(id = exerciseDao.insert(entity))
     }
-
-    suspend fun hideExercise(id: Long) = exerciseDao.setHidden(id, true)
 
     // ---------- 식단 기록 ----------
 
@@ -191,16 +190,34 @@ class Repository(private val db: AppDatabase) {
                         routineId = 0,
                         orderIndex = index,
                         exerciseName = ex.exerciseName,
-                        defaultSetting = ex.defaultSetting,
-                        defaultWeight = ex.defaultWeight,
-                        defaultReps = ex.defaultReps
-                    )
+                        defaultSetting = ex.defaultSetting
+                    ) to List(ex.setCount) { setIndex ->
+                        RoutineSet(
+                            routineExerciseId = 0,
+                            setIndex = setIndex,
+                            weightKg = ex.defaultWeight,
+                            reps = ex.defaultReps
+                        )
+                    }
                 }
             )
         }
     }
 
+    suspend fun routineNameExists(name: String, exceptId: Long = 0): Boolean =
+        routineDao.countByName(name, exceptId) > 0
+
     suspend fun addRoutine(name: String) = routineDao.insertWithExercises(name, emptyList())
+
+    suspend fun saveAsNewRoutine(
+        name: String,
+        exercises: List<Pair<RoutineExercise, List<RoutineSet>>>
+    ) = routineDao.insertWithExercises(name, exercises)
+
+    suspend fun overwriteRoutine(
+        routineId: Long,
+        exercises: List<Pair<RoutineExercise, List<RoutineSet>>>
+    ) = routineDao.replaceExercises(routineId, exercises)
 
     suspend fun renameRoutine(routineId: Long, name: String) = routineDao.rename(routineId, name)
 
@@ -263,9 +280,7 @@ class Repository(private val db: AppDatabase) {
 
         snapshot.routines.forEach { dto ->
             val id = routineDao.insertRoutine(Routine(name = dto.name, orderIndex = dto.orderIndex))
-            if (dto.exercises.isNotEmpty()) {
-                routineDao.insertExercises(dto.exercises.map { it.toEntity(id, idBySlug) })
-            }
+            routineDao.insertExercisesWithSets(id, dto.exercises.map { it.toEntityPair(id, idBySlug) })
         }
 
         snapshot.dietTemplates.forEach { dto ->
@@ -340,9 +355,7 @@ class Repository(private val db: AppDatabase) {
             val name = uniqueName(dto.name, takenRoutineNames)
             takenRoutineNames += name
             val id = routineDao.insertRoutine(Routine(name = name, orderIndex = routineDao.nextOrderIndex()))
-            if (dto.exercises.isNotEmpty()) {
-                routineDao.insertExercises(dto.exercises.map { it.toEntity(id, idBySlug) })
-            }
+            routineDao.insertExercisesWithSets(id, dto.exercises.map { it.toEntityPair(id, idBySlug) })
             addedRoutines++
         }
 

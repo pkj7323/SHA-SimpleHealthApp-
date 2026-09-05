@@ -197,7 +197,7 @@ object XlsxExporter {
         val catalogByName = exercises.associateBy { it.name }
         var row = 1
         routines.forEach { item ->
-            item.exercises.sortedBy { it.orderIndex }.forEach { ex ->
+            item.exercises.sortedBy { it.exercise.orderIndex }.forEach { (ex, _) ->
                 val catalog = catalogByName[ex.exerciseName]
                 ws.value(row, 0, ex.exerciseName)
                 ws.value(row, 1, item.routine.name)
