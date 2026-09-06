@@ -10,6 +10,7 @@ import com.pkj.leanbulk.data.Exercise
 import com.pkj.leanbulk.data.FoodItem
 import com.pkj.leanbulk.data.Macros
 import com.pkj.leanbulk.data.MealEntry
+import com.pkj.leanbulk.data.MealFood
 import com.pkj.leanbulk.data.Routine
 import com.pkj.leanbulk.data.RoutineExercise
 import com.pkj.leanbulk.data.RoutineSet
@@ -38,6 +39,10 @@ class SnapshotCompletenessTest {
 
         assertFields<MealEntry>("id", "date", "orderIndex", "slotName", "menuText", "macros", "eaten", "memo",
             "macroSource")
+        assertFields<MealFood>(
+            "id", "mealEntryId", "orderIndex", "foodId", "name", "multiplier", "amountGram",
+            "macros", "macroSource"
+        )
 
         assertFields<WorkoutExercise>(
             "id", "date", "routineName", "orderIndex", "exerciseId", "exerciseName",

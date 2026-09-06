@@ -66,7 +66,27 @@ data class MealDto(
      * 옛 백업엔 이 값이 없다. 그때는 셋을 구분하지 않고 저장했으므로 지금 와서 갈라낼 수
      * 없고, 매크로가 있으면 `ENTERED`, 없으면 `NONE`으로 읽는다(마이그레이션 10→11과 같은 처리).
      */
-    val macroSource: String? = null
+    val macroSource: String? = null,
+    /**
+     * 이 끼니를 구성하는 음식 줄(DIET-REDESIGN.md). 비어 있으면 옛 자유 텍스트 방식이다.
+     * `macros`/`macroSource`는 이 목록의 합계를 그대로 담고 있으므로(§ 왜 컬럼에 합계를
+     * 채워 넣는지는 `DietDraft.kt`의 `recomputeFromFoods` 참고) 옛 백업이 이 필드를
+     * 몰라도 매크로 자체는 그대로 읽힌다.
+     */
+    val foods: List<MealFoodDto> = emptyList()
+)
+
+/** 끼니 안 음식 한 줄. */
+@Serializable
+data class MealFoodDto(
+    val orderIndex: Int,
+    /** 카탈로그 참조는 로컬 id가 아니라 slug로 싣는다(다른 필드들과 같은 이유). */
+    val foodSlug: String? = null,
+    val name: String,
+    val multiplier: Double,
+    val amountGram: Double? = null,
+    val macros: MacrosDto,
+    val macroSource: String = "CATALOG"
 )
 
 /** 하루치 운동. 세트를 종목 안에 중첩해서 담는다. */

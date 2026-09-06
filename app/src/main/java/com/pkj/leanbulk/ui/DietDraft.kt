@@ -1,10 +1,34 @@
 package com.pkj.leanbulk.ui
 
 import com.pkj.leanbulk.data.DietTemplateMeal
+import com.pkj.leanbulk.data.FoodItem
 import com.pkj.leanbulk.data.MacroEstimator
 import com.pkj.leanbulk.data.MacroSource
 import com.pkj.leanbulk.data.Macros
 import com.pkj.leanbulk.data.MealEntry
+import com.pkj.leanbulk.data.MealEntryWithFoods
+import com.pkj.leanbulk.data.MealFood
+import kotlin.math.roundToInt
+
+/** 끼니 안 음식 한 줄. 화면에서 편집 중인, 아직 저장 전 상태([MealFood]와 같은 모양). */
+data class DraftMealFood(
+    val foodId: Long?,
+    val name: String,
+    val multiplier: Double,
+    val amountGram: Double?,
+    val macros: Macros,
+    val macroSource: MacroSource
+)
+
+/** 카탈로그 값 × 배수로 음식 줄 하나를 만든다. */
+fun FoodItem.toDraftMealFood(multiplier: Double): DraftMealFood = DraftMealFood(
+    foodId = id,
+    name = name,
+    multiplier = multiplier,
+    amountGram = baseAmountGram?.times(multiplier),
+    macros = macros.scaledBy(multiplier),
+    macroSource = MacroSource.CATALOG
+)
 
 /** 화면에서 편집 중인 끼니 한 줄. 아직 저장 전 상태. */
 data class DraftMeal(
@@ -13,10 +37,22 @@ data class DraftMeal(
     val macros: Macros = Macros(),
     val eaten: Boolean = false,
     /** 이 매크로가 어디서 온 값인가. 비어 있으면 [MacroSource.NONE]. */
-    val macroSource: MacroSource = MacroSource.NONE
+    val macroSource: MacroSource = MacroSource.NONE,
+    /** 음식 줄들. 채워져 있으면 새 방식이다 — 자세한 건 [isFoodBased] 참고. */
+    val foods: List<DraftMealFood> = emptyList(),
+    /**
+     * 새 방식(음식 줄)으로 편집 중인지.
+     *
+     * `foods.isNotEmpty()`만으로 판단하지 않는 이유: 막 새 방식을 고르고 아직 음식을 하나도
+     * 안 담았을 때도 새 방식 화면을 보여줘야 하는데, 그 순간엔 `foods`가 비어 있다.
+     */
+    val isFoodBased: Boolean = foods.isNotEmpty()
 ) {
-    /** 매크로를 직접 넣지 않았을 때만 쓰는 참고용 어림값. 합계에는 섞지 않는다. */
-    val estimate: Macros? get() = if (macros.isEmpty) MacroEstimator.estimate(menuText) else null
+    /**
+     * 매크로를 직접 넣지 않았을 때만 쓰는 참고용 어림값. 새 방식 끼니에는 안 쓴다 —
+     * 매크로가 늘 카탈로그에서 계산되어 있어서 "모름"이 나올 일이 없다.
+     */
+    val estimate: Macros? get() = if (!isFoodBased && macros.isEmpty) MacroEstimator.estimate(menuText) else null
 }
 
 /**
@@ -29,6 +65,51 @@ fun DraftMeal.editMacros(transform: (Macros) -> Macros): DraftMeal {
     return copy(
         macros = next,
         macroSource = if (next.isEmpty) MacroSource.NONE else MacroSource.ENTERED
+    )
+}
+
+/**
+ * 음식 줄이 바뀐 뒤 끼니 요약(메뉴 텍스트·매크로·출처)을 다시 계산한다.
+ *
+ * 이렇게 **`meal_entry` 컬럼 자체에 합계를 그대로 채워 넣어 두는 이유**는, 히스토리·
+ * xlsx 내보내기·오늘 섭취 합계가 전부 `MealEntry.macros`/`menuText`를 직접 읽기
+ * 때문이다. 음식 줄(`meal_food`)은 그 값의 "근거"이지, 저 화면들이 새로 알아야 하는
+ * 별도 데이터가 아니다 — 덕분에 이번 개편에서 그 화면들을 하나도 안 건드려도 된다.
+ */
+fun DraftMeal.recomputeFromFoods(): DraftMeal {
+    if (!isFoodBased) return this
+    return copy(
+        menuText = foods.summaryText(),
+        macros = foods.summedMacros(),
+        macroSource = if (foods.isEmpty()) MacroSource.NONE else MacroSource.CATALOG
+    )
+}
+
+private fun List<DraftMealFood>.summaryText(): String = joinToString(" + ") { f ->
+    val qty = f.amountGram?.let { "${it.roundToInt()}g" } ?: "×${formatMultiplier(f.multiplier)}"
+    "${f.name} $qty"
+}
+
+/** "2.0" 대신 "2"로 — 이 문자열은 [MealEntry.menuText]로 그대로 저장돼 히스토리·xlsx에 나간다. */
+private fun formatMultiplier(value: Double): String =
+    if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString()
+
+/**
+ * 음식 줄들의 매크로를 더한다. 한 줄이라도 그 항목이 `null`(모름)이면 합계도 `null`이다 —
+ * 모르는 값이 섞였는데 더해서 아는 척 숫자를 내놓으면 안 된다.
+ */
+private fun List<DraftMealFood>.summedMacros(): Macros {
+    if (isEmpty()) return Macros()
+    fun sum(pick: (Macros) -> Double?): Double? {
+        val values = map { pick(it.macros) }
+        return if (values.any { it == null }) null else values.sumOf { it!! }
+    }
+    return Macros(
+        kcal = sum { it.kcal },
+        protein = sum { it.protein },
+        carbs = sum { it.carbs },
+        fat = sum { it.fat },
+        sugar = sum { it.sugar }
     )
 }
 
@@ -84,25 +165,57 @@ fun DietTemplateMeal.toDraft(): DraftMeal = DraftMeal(
     macroSource = if (macros.isEmpty) MacroSource.NONE else MacroSource.ENTERED
 )
 
-fun MealEntry.toDraft(): DraftMeal = DraftMeal(
-    slotName = slotName,
-    menuText = menuText,
-    macros = macros,
-    eaten = eaten,
-    macroSource = macroSource
-)
-
-fun List<DraftMeal>.toMealEntries(date: String): List<MealEntry> = mapIndexed { index, m ->
-    MealEntry(
-        date = date,
-        orderIndex = index,
-        slotName = m.slotName,
-        menuText = m.menuText,
-        macros = m.macros,
-        eaten = m.eaten,
-        macroSource = m.macroSource
+/**
+ * 끼니 + 그 안의 음식 줄을 화면 상태로 옮긴다.
+ * 음식 줄이 하나라도 있으면 [DraftMeal.isFoodBased]가 자동으로 참이 된다.
+ */
+fun MealEntryWithFoods.toDraft(): DraftMeal {
+    val draftFoods = foods.sortedBy { it.orderIndex }.map {
+        DraftMealFood(
+            foodId = it.foodId,
+            name = it.name,
+            multiplier = it.multiplier,
+            amountGram = it.amountGram,
+            macros = it.macros,
+            macroSource = it.macroSource
+        )
+    }
+    return DraftMeal(
+        slotName = entry.slotName,
+        menuText = entry.menuText,
+        macros = entry.macros,
+        eaten = entry.eaten,
+        macroSource = entry.macroSource,
+        foods = draftFoods
     )
 }
+
+/** 화면의 끼니 목록을 저장 가능한 (끼니, 음식 줄들) 쌍으로 편다. */
+fun List<DraftMeal>.toMealEntryPairs(date: String): List<Pair<MealEntry, List<MealFood>>> =
+    mapIndexed { index, m ->
+        val entry = MealEntry(
+            date = date,
+            orderIndex = index,
+            slotName = m.slotName,
+            menuText = m.menuText,
+            macros = m.macros,
+            eaten = m.eaten,
+            macroSource = m.macroSource
+        )
+        val foods = m.foods.mapIndexed { foodIndex, f ->
+            MealFood(
+                mealEntryId = 0,
+                orderIndex = foodIndex,
+                foodId = f.foodId,
+                name = f.name,
+                multiplier = f.multiplier,
+                amountGram = f.amountGram,
+                macros = f.macros,
+                macroSource = f.macroSource
+            )
+        }
+        entry to foods
+    }
 
 fun List<DraftMeal>.toTemplateMeals(): List<DietTemplateMeal> = mapIndexed { index, m ->
     DietTemplateMeal(

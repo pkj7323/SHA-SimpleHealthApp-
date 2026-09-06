@@ -380,8 +380,8 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
 
     private fun loadDietDraft(date: String) {
         viewModelScope.launch {
-            val saved = repository.observeMeals(date).first()
-            _dietDraft.value = saved.sortedBy { it.orderIndex }.map { it.toDraft() }
+            val saved = repository.observeMealsWithFoods(date).first()
+            _dietDraft.value = saved.sortedBy { it.entry.orderIndex }.map { it.toDraft() }
             if (saved.isEmpty()) _dietTemplateName.value = ""
         }
     }
@@ -468,6 +468,39 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
         viewModelScope.launch { repository.hideFood(id) }
     }
 
+    /**
+     * 빈 끼니를 음식 줄 방식으로 바꾼다.
+     *
+     * 이미 텍스트를 적었거나 음식이 있으면 아무 일도 안 한다 — 자동 변환은 없다
+     * (DIET-REDESIGN.md §8). 이 함수는 "아직 아무것도 안 적은 끼니"에서만 의미가 있다.
+     */
+    fun startFoodBasedMeal(index: Int) {
+        updateMeal(index) { meal ->
+            if (meal.menuText.isNotBlank() || !meal.macros.isEmpty || meal.foods.isNotEmpty()) meal
+            else meal.copy(isFoodBased = true)
+        }
+    }
+
+    fun addFoodToMeal(index: Int, food: FoodItem, multiplier: Double) {
+        updateMeal(index) { meal ->
+            meal.copy(foods = meal.foods + food.toDraftMealFood(multiplier)).recomputeFromFoods()
+        }
+    }
+
+    fun removeFoodFromMeal(mealIndex: Int, foodIndex: Int) {
+        updateMeal(mealIndex) { meal ->
+            meal.copy(foods = meal.foods.filterIndexed { i, _ -> i != foodIndex }).recomputeFromFoods()
+        }
+    }
+
+    /** 음식 줄 순서를 옮긴다. 운동 종목 순서 조정과 같은 이유 — 담는 순서는 늘 맨 아래다. */
+    fun moveFoodInMeal(mealIndex: Int, from: Int, to: Int) {
+        updateMeal(mealIndex) { meal ->
+            if (from !in meal.foods.indices || to !in meal.foods.indices || from == to) meal
+            else meal.copy(foods = meal.foods.toMutableList().apply { add(to, removeAt(from)) }).recomputeFromFoods()
+        }
+    }
+
     private fun scheduleDietSave() {
         val snapshot = DietSnapshot(_dietDate.value, _dietDraft.value)
         pendingDiet = snapshot
@@ -484,7 +517,7 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
     }
 
     private suspend fun writeDiet(s: DietSnapshot) {
-        repository.saveMealDay(s.date, s.draft.toMealEntries(s.date))
+        repository.saveMealDay(s.date, s.draft.toMealEntryPairs(s.date))
         pendingDiet = null
         _savedAt.value = LocalDateTime.now().format(TIME_FMT)
     }

@@ -16,6 +16,7 @@ import com.pkj.leanbulk.data.FoodItem
 import com.pkj.leanbulk.data.MacroSource
 import com.pkj.leanbulk.data.Macros
 import com.pkj.leanbulk.data.MealEntry
+import com.pkj.leanbulk.data.MealFood
 import com.pkj.leanbulk.data.Repository
 import com.pkj.leanbulk.data.Routine
 import com.pkj.leanbulk.data.RoutineExercise
@@ -24,6 +25,7 @@ import com.pkj.leanbulk.data.WorkoutExercise
 import com.pkj.leanbulk.data.WorkoutSet
 import com.pkj.leanbulk.data.backup.BackupFiles
 import com.pkj.leanbulk.data.backup.SnapshotCodec
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -118,6 +120,30 @@ class SnapshotRoundTripTest {
         )
         assertEquals(MacroSource.NONE.name, requireNotNull(meals["모름"]).macroSource)
         assertEquals(MacroSource.ENTERED.name, requireNotNull(meals["진짜0"]).macroSource)
+    }
+
+    /**
+     * 음식 줄(`meal_food`)의 카탈로그 참조는 로컬 id가 아니라 slug로 실린다(다른 참조들과
+     * 같은 이유 — auto id는 기기마다 다르다). 왕복한 뒤에도 슬러그로 올바른 음식에 다시
+     * 붙는지, 카탈로그에 없는 줄(`foodId = null`)이 엉뚱한 음식에 붙지 않는지 확인한다.
+     */
+    @Test
+    fun 음식_줄이_카탈로그에_slug로_다시_이어붙는다() = runBlocking {
+        seedTrickyData()
+
+        repo.importSnapshot(SnapshotCodec.fromJson(SnapshotCodec.toJson(repo.exportSnapshot(fixedTime))))
+
+        val meal = repo.observeMealsWithFoods("2026-09-01").first().single()
+        assertEquals("음식 줄 수가 달라졌다", 2, meal.foods.size)
+
+        val chickenLine = meal.foods.first { it.name == "닭가슴살" }
+        val chickenId = requireNotNull(db.foodDao().findBySlug("chicken-breast-100g")).id
+        assertEquals("카탈로그 연결이 slug로 다시 안 이어졌다", chickenId, chickenLine.foodId)
+        assertEquals(150.0, chickenLine.amountGram!!, 0.001)
+
+        val aiLine = meal.foods.first { it.name == "그릭요거트 200g" }
+        assertNull("카탈로그에 없던 줄이 엉뚱한 음식에 붙었다", aiLine.foodId)
+        assertEquals(MacroSource.AI_SUGGESTED, aiLine.macroSource)
     }
 
     @Test
@@ -294,6 +320,32 @@ class SnapshotRoundTripTest {
         db.foodDao().insert(
             FoodItem(
                 slug = "user-water", name = "물", macros = Macros(0.0, 0.0, 0.0, 0.0, 0.0), usedCount = 1
+            )
+        )
+
+        // 음식 줄이 있는 새 방식 끼니(DIET-REDESIGN.md). 카탈로그에서 온 줄 하나 +
+        // AI가 막 제안해서 아직 카탈로그에 없는 줄 하나(foodId=null)를 섞는다.
+        val chickenId = requireNotNull(db.foodDao().findBySlug("chicken-breast-100g")).id
+        repo.saveMealDay(
+            "2026-09-01",
+            listOf(
+                MealEntry(
+                    date = "2026-09-01", orderIndex = 0, slotName = "점심",
+                    menuText = "", macros = Macros(), eaten = true
+                ) to listOf(
+                    MealFood(
+                        mealEntryId = 0, orderIndex = 0, foodId = chickenId, name = "닭가슴살",
+                        multiplier = 1.5, amountGram = 150.0,
+                        macros = Macros(kcal = 247.5, protein = 46.5, carbs = 0.0, fat = 5.4, sugar = 0.0),
+                        macroSource = MacroSource.CATALOG
+                    ),
+                    MealFood(
+                        mealEntryId = 0, orderIndex = 1, foodId = null, name = "그릭요거트 200g",
+                        multiplier = 2.0, amountGram = null,
+                        macros = Macros(kcal = 194.0, protein = 18.0, carbs = 8.0, fat = 10.0, sugar = 8.0),
+                        macroSource = MacroSource.AI_SUGGESTED
+                    )
+                )
             )
         )
 

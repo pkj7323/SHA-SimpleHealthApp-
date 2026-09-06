@@ -102,30 +102,25 @@ class Repository(private val db: AppDatabase) {
 
     // ---------- 식단 기록 ----------
 
-    fun observeMeals(date: String): Flow<List<MealEntry>> = mealDao.observeByDate(date)
+    fun observeMealsWithFoods(date: String): Flow<List<MealEntryWithFoods>> =
+        mealDao.observeByDateWithFoods(date)
 
     fun observeAllMeals(): Flow<List<MealEntry>> = mealDao.observeAll()
 
     suspend fun hasMealRecord(date: String): Boolean = mealDao.countForDate(date) > 0
 
-    suspend fun saveMealDay(date: String, entries: List<MealEntry>) {
-        mealDao.replaceDay(date, entries)
-        // 매크로를 채운 메뉴는 "내 음식 목록"에 쌓아둔다.
-        entries.filter { it.menuText.isNotBlank() && !it.macros.isEmpty }
-            .forEach { foodDao.remember(it.menuText.trim(), it.macros) }
-    }
-
-    // ---------- 음식 줄이 있는 새 방식 끼니 ----------
-
-    fun observeMealsWithFoods(date: String): Flow<List<MealEntryWithFoods>> =
-        mealDao.observeByDateWithFoods(date)
-
     /**
-     * 음식 줄까지 포함해 하루치 식단을 저장한다. 옛 [saveMealDay]와 달리 "내 음식 목록"에
-     * 다시 쌓지 않는다 — 음식이 이미 카탈로그(`foodId`)에서 왔으니 다시 기억할 이유가 없다.
+     * 하루치 식단을 저장한다. 자유 텍스트 끼니와 음식 줄이 있는 끼니가 같은 날짜에
+     * 섞여 있어도 된다(DIET-REDESIGN.md §3) — 음식 줄이 없는 항목은 그냥 옛 방식 그대로 저장된다.
+     *
+     * **음식 줄이 없는 끼니만** "내 음식 목록"에 쌓는다. 음식 줄이 있는 끼니는 이미
+     * 카탈로그(`foodId`)에서 왔으니 다시 기억할 이유가 없다.
      */
-    suspend fun saveMealDayWithFoods(date: String, entries: List<Pair<MealEntry, List<MealFood>>>) =
+    suspend fun saveMealDay(date: String, entries: List<Pair<MealEntry, List<MealFood>>>) {
         mealDao.replaceDayWithFoods(date, entries)
+        entries.filter { (entry, foods) -> foods.isEmpty() && entry.menuText.isNotBlank() && !entry.macros.isEmpty }
+            .forEach { (entry, _) -> foodDao.remember(entry.menuText.trim(), entry.macros) }
+    }
 
     // ---------- 식단표 ----------
 
@@ -273,12 +268,13 @@ class Repository(private val db: AppDatabase) {
         val catalog = exerciseDao.getAll()
         // 기록이 들고 있는 로컬 id를 기기 간에 통하는 slug로 바꿔서 내보낸다.
         val slugById = catalog.associate { it.id to it.slug }
+        val foodSlugById = foodDao.getAll().associate { it.id to it.slug }
 
         Snapshot(
             exportedAt = exportedAt,
             seedVersion = seedVersion(),
             exercises = catalog.map { it.toDto() },
-            meals = mealDao.getAll().map { it.toDto() },
+            meals = mealDao.getAllWithFoods().map { it.toDto(foodSlugById) },
             workoutDays = workoutDao.getAll().toWorkoutDayDtos(slugById),
             routines = routineDao.getAll().map { it.toDto(slugById) },
             dietTemplates = dietTemplateDao.getAll().map { it.toDto() },
@@ -308,8 +304,17 @@ class Repository(private val db: AppDatabase) {
         val idBySlug = snapshot.exercises.associate { dto ->
             dto.slug to exerciseDao.insert(dto.toEntity())
         }
+        // 음식도 마찬가지 — meal_food가 slug로 이 카탈로그를 참조하므로 끼니보다 먼저 넣는다.
+        val foodIdBySlug = mutableMapOf<String, Long>()
+        snapshot.foods.forEach { dto ->
+            val entity = dto.toEntity()
+            foodDao.insert(entity)
+            foodDao.findBySlug(entity.slug)?.let { foodIdBySlug[entity.slug] = it.id }
+        }
 
-        mealDao.insertAll(snapshot.meals.map { it.toEntity() })
+        snapshot.meals.groupBy { it.date }.forEach { (date, dtos) ->
+            mealDao.replaceDayWithFoods(date, dtos.map { it.toEntityPair(foodIdBySlug) })
+        }
 
         snapshot.workoutDays.forEach { day ->
             workoutDao.replaceDay(day.date, day.toEntityPairs(idBySlug))
@@ -327,7 +332,6 @@ class Repository(private val db: AppDatabase) {
             }
         }
 
-        snapshot.foods.forEach { foodDao.insert(it.toEntity()) }
         snapshot.bodyRecords.forEach { bodyRecordDao.upsert(it.toEntity()) }
         snapshot.target?.let { dietTargetDao.upsert(it.toEntity()) }
 

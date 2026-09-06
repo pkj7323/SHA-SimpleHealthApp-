@@ -14,6 +14,8 @@ import com.pkj.leanbulk.data.TrackingType
 import com.pkj.leanbulk.data.MacroSource
 import com.pkj.leanbulk.data.Macros
 import com.pkj.leanbulk.data.MealEntry
+import com.pkj.leanbulk.data.MealEntryWithFoods
+import com.pkj.leanbulk.data.MealFood
 import com.pkj.leanbulk.data.RoutineExercise
 import com.pkj.leanbulk.data.RoutineSet
 import com.pkj.leanbulk.data.RoutineWithExercises
@@ -66,6 +68,21 @@ object SnapshotCodec {
         eaten = eaten,
         memo = memo,
         macroSource = macroSource.name
+    )
+
+    /** 음식 줄까지 포함해 끼니 하나를 내보낸다. */
+    fun MealEntryWithFoods.toDto(foodSlugById: Map<Long, String>) = entry.toDto().copy(
+        foods = foods.sortedBy { it.orderIndex }.map { f ->
+            MealFoodDto(
+                orderIndex = f.orderIndex,
+                foodSlug = f.foodId?.let { foodSlugById[it] },
+                name = f.name,
+                multiplier = f.multiplier,
+                amountGram = f.amountGram,
+                macros = f.macros.toDto(),
+                macroSource = f.macroSource.name
+            )
+        }
     )
 
     fun Exercise.toDto() = ExerciseDto(
@@ -181,6 +198,24 @@ object SnapshotCodec {
                 runCatching { MacroSource.valueOf(it) }.getOrNull()
             } ?: if (restored.isEmpty) MacroSource.NONE else MacroSource.ENTERED
         )
+    }
+
+    /** 끼니 + 그 안의 음식 줄을 되돌린다. `foods`가 비어 있으면 옛 자유 텍스트 방식이다. */
+    fun MealDto.toEntityPair(idBySlug: Map<String, Long>): Pair<MealEntry, List<MealFood>> {
+        val entity = toEntity()
+        val restoredFoods = foods.sortedBy { it.orderIndex }.map { f ->
+            MealFood(
+                mealEntryId = 0,
+                orderIndex = f.orderIndex,
+                foodId = f.foodSlug?.let { idBySlug[it] },
+                name = f.name,
+                multiplier = f.multiplier,
+                amountGram = f.amountGram,
+                macros = f.macros.toEntity(),
+                macroSource = runCatching { MacroSource.valueOf(f.macroSource) }.getOrDefault(MacroSource.CATALOG)
+            )
+        }
+        return entity to restoredFoods
     }
 
     /** 모르는 값이 와도 죽지 않게 기본값으로 떨어뜨린다(구버전이 신버전 파일을 읽는 경우). */

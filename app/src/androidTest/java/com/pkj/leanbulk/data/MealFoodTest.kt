@@ -96,7 +96,7 @@ class MealFoodTest {
         )
         val food = chicken.copy(id = foodId).toMealFood(mealEntryId = 0, orderIndex = 0, multiplier = 1.5)
 
-        repo.saveMealDayWithFoods("2026-09-06", listOf(entry to listOf(food)))
+        repo.saveMealDay("2026-09-06", listOf(entry to listOf(food)))
 
         val saved = repo.observeMealsWithFoods("2026-09-06").first().single()
         assertEquals(1, saved.foods.size)
@@ -117,10 +117,10 @@ class MealFoodTest {
             mealEntryId = 0, orderIndex = 0, name = "닭가슴살", multiplier = 1.0,
             amountGram = 100.0, macros = Macros(kcal = 165.0), macroSource = MacroSource.CATALOG
         )
-        repo.saveMealDayWithFoods("2026-09-06", listOf(entry to listOf(firstFood)))
+        repo.saveMealDay("2026-09-06", listOf(entry to listOf(firstFood)))
 
         // 같은 날짜를 다른 구성으로 덮어쓴다.
-        repo.saveMealDayWithFoods("2026-09-06", listOf(entry to emptyList()))
+        repo.saveMealDay("2026-09-06", listOf(entry to emptyList()))
 
         val saved = repo.observeMealsWithFoods("2026-09-06").first().single()
         assertTrue("옛 음식 줄이 CASCADE 없이 남았다", saved.foods.isEmpty())

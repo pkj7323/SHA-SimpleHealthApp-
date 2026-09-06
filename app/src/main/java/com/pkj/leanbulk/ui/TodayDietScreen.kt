@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -18,6 +19,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
@@ -143,7 +146,11 @@ fun TodayDietScreen(vm: MainViewModel) {
                     onChange = { transform -> vm.updateMeal(index, transform) },
                     onRemove = { vm.removeMeal(index) },
                     onPickFood = { foodPickerFor = index },
-                    onAcceptEstimate = { vm.acceptEstimate(index) }
+                    onAcceptEstimate = { vm.acceptEstimate(index) },
+                    onStartFoodBased = { vm.startFoodBasedMeal(index) },
+                    onAddFood = { foodPickerFor = index },
+                    onRemoveFood = { foodIndex -> vm.removeFoodFromMeal(index, foodIndex) },
+                    onMoveFood = { from, to -> vm.moveFoodInMeal(index, from, to) }
                 )
             }
         }
@@ -209,13 +216,24 @@ fun TodayDietScreen(vm: MainViewModel) {
         )
     }
 
+    // 어느 다이얼로그를 열지는 그 끼니가 새 방식인지로 갈린다 — 끼니 하나가 두 방식을
+    // 동시에 쓰지 않으므로(§3, DIET-REDESIGN.md) 상태 변수 하나로 충분하다.
     foodPickerFor?.let { index ->
-        FoodPickerDialog(
-            foods = foods,
-            onPick = { vm.applyFood(index, it); foodPickerFor = null },
-            onHide = vm::hideFood,
-            onDismiss = { foodPickerFor = null }
-        )
+        if (draft.getOrNull(index)?.isFoodBased == true) {
+            FoodQuantityPickerDialog(
+                foods = foods,
+                onConfirm = { food, multiplier -> vm.addFoodToMeal(index, food, multiplier) },
+                onHide = vm::hideFood,
+                onDismiss = { foodPickerFor = null }
+            )
+        } else {
+            FoodPickerDialog(
+                foods = foods,
+                onPick = { vm.applyFood(index, it); foodPickerFor = null },
+                onHide = vm::hideFood,
+                onDismiss = { foodPickerFor = null }
+            )
+        }
     }
 
 }
@@ -265,7 +283,11 @@ private fun MealCard(
     onChange: ((DraftMeal) -> DraftMeal) -> Unit,
     onRemove: () -> Unit,
     onPickFood: () -> Unit,
-    onAcceptEstimate: () -> Unit
+    onAcceptEstimate: () -> Unit,
+    onStartFoodBased: () -> Unit,
+    onAddFood: () -> Unit,
+    onRemoveFood: (Int) -> Unit,
+    onMoveFood: (Int, Int) -> Unit
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
@@ -284,54 +306,135 @@ private fun MealCard(
                 }
             }
 
-            OutlinedTextField(
-                value = meal.menuText,
-                onValueChange = { v -> onChange { it.copy(menuText = v) } },
-                label = { Text("메뉴") },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-            )
-
-            OutlinedButton(
-                onClick = onPickFood,
-                modifier = Modifier.padding(top = 8.dp)
-            ) { Text("음식 목록에서 고르기") }
-
-            // 저장된 뒤에도 이 숫자가 어디서 왔는지 보이게 한다. 직접 잰 값과 때려맞춘 값이
-            // 화면에서 같아 보이면, 사용자도 나중에 자기 기록을 못 믿는다.
-            Text(
-                when (meal.macroSource) {
-                    MacroSource.ESTIMATED -> "영양정보 ≈ 메뉴 이름으로 어림한 값"
-                    MacroSource.CATALOG -> "영양정보 · 음식 목록에서 가져온 값"
-                    else -> "영양정보 (모르면 비워두세요)"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-            Row(
-                Modifier.fillMaxWidth().horizontalScrollRow(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                NullableNumberField("칼로리", meal.macros.kcal) { v -> onChange { it.editMacros { m -> m.copy(kcal = v) } } }
-                NullableNumberField("단백질", meal.macros.protein) { v -> onChange { it.editMacros { m -> m.copy(protein = v) } } }
-                NullableNumberField("탄수", meal.macros.carbs) { v -> onChange { it.editMacros { m -> m.copy(carbs = v) } } }
-                NullableNumberField("지방", meal.macros.fat) { v -> onChange { it.editMacros { m -> m.copy(fat = v) } } }
-                NullableNumberField("당", meal.macros.sugar) { v -> onChange { it.editMacros { m -> m.copy(sugar = v) } } }
-            }
-
-            // 글자 하나 칠 때마다 추정 테이블을 다시 훑지 않도록 메뉴/매크로가 바뀔 때만 계산한다.
-            val estimate = remember(meal.menuText, meal.macros) { meal.estimate }
-            estimate?.let { est ->
-                Column(Modifier.padding(top = 8.dp)) {
-                    Text(
-                        "어림값 (참고용): ${formatMacros(est)}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    TextButton(onClick = onAcceptEstimate) { Text("이 값으로 채우기") }
-                }
+            if (meal.isFoodBased) {
+                FoodBasedMealBody(meal, onAddFood, onRemoveFood, onMoveFood)
+            } else {
+                LegacyMealBody(meal, onChange, onPickFood, onAcceptEstimate, onStartFoodBased)
             }
         }
     }
 }
+
+/**
+ * 음식 줄로 구성된 끼니. 매크로는 항상 [DraftMeal.recomputeFromFoods]로 미리 계산돼 있어서
+ * 직접 입력 칸도, 어림값 안내도 필요 없다 — 카탈로그 값 × 배수라 "모름"이 나올 일이 없다.
+ */
+@Composable
+private fun FoodBasedMealBody(
+    meal: DraftMeal,
+    onAddFood: () -> Unit,
+    onRemoveFood: (Int) -> Unit,
+    onMoveFood: (Int, Int) -> Unit
+) {
+    Column(Modifier.padding(top = 8.dp)) {
+        meal.foods.forEachIndexed { index, food ->
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(food.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(formatFoodQuantity(food), style = MaterialTheme.typography.bodySmall)
+                }
+                // 종목 순서 조정과 같은 이유 — 담는 순서가 늘 마지막이라 끌어올릴 수단이 필요하다.
+                IconButton(
+                    onClick = { onMoveFood(index, index - 1) },
+                    enabled = index > 0,
+                    modifier = Modifier.size(36.dp)
+                ) { Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "위로") }
+                IconButton(
+                    onClick = { onMoveFood(index, index + 1) },
+                    enabled = index < meal.foods.lastIndex,
+                    modifier = Modifier.size(36.dp)
+                ) { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "아래로") }
+                IconButton(onClick = { onRemoveFood(index) }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.Delete, contentDescription = "음식 삭제")
+                }
+            }
+        }
+
+        OutlinedButton(onClick = onAddFood, modifier = Modifier.padding(top = 4.dp)) { Text("음식 추가") }
+
+        if (meal.foods.isNotEmpty()) {
+            Text(
+                "합계 ${formatMacros(meal.macros)}",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+    }
+}
+
+/** 자유 텍스트로 적는 옛 방식. DIET-REDESIGN.md §3 — 새 구조로 자동 변환하지 않는다. */
+@Composable
+private fun LegacyMealBody(
+    meal: DraftMeal,
+    onChange: ((DraftMeal) -> DraftMeal) -> Unit,
+    onPickFood: () -> Unit,
+    onAcceptEstimate: () -> Unit,
+    onStartFoodBased: () -> Unit
+) {
+    OutlinedTextField(
+        value = meal.menuText,
+        onValueChange = { v -> onChange { it.copy(menuText = v) } },
+        label = { Text("메뉴") },
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+    )
+
+    Row(
+        Modifier.fillMaxWidth().padding(top = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        OutlinedButton(onClick = onPickFood) { Text("음식 목록에서 고르기") }
+        // 아직 아무것도 안 적은 끼니에서만 보여준다 — 이미 적은 걸 새 방식으로
+        // 바꿔주는 자동 변환은 없다(직접 다시 입력해야 한다).
+        if (meal.menuText.isBlank() && meal.macros.isEmpty) {
+            OutlinedButton(onClick = onStartFoodBased) { Text("음식으로 채우기") }
+        }
+    }
+
+    // 저장된 뒤에도 이 숫자가 어디서 왔는지 보이게 한다. 직접 잰 값과 때려맞춘 값이
+    // 화면에서 같아 보이면, 사용자도 나중에 자기 기록을 못 믿는다.
+    Text(
+        when (meal.macroSource) {
+            MacroSource.ESTIMATED -> "영양정보 ≈ 메뉴 이름으로 어림한 값"
+            MacroSource.CATALOG -> "영양정보 · 음식 목록에서 가져온 값"
+            else -> "영양정보 (모르면 비워두세요)"
+        },
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.padding(top = 8.dp)
+    )
+    Row(
+        Modifier.fillMaxWidth().horizontalScrollRow(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        NullableNumberField("칼로리", meal.macros.kcal) { v -> onChange { it.editMacros { m -> m.copy(kcal = v) } } }
+        NullableNumberField("단백질", meal.macros.protein) { v -> onChange { it.editMacros { m -> m.copy(protein = v) } } }
+        NullableNumberField("탄수", meal.macros.carbs) { v -> onChange { it.editMacros { m -> m.copy(carbs = v) } } }
+        NullableNumberField("지방", meal.macros.fat) { v -> onChange { it.editMacros { m -> m.copy(fat = v) } } }
+        NullableNumberField("당", meal.macros.sugar) { v -> onChange { it.editMacros { m -> m.copy(sugar = v) } } }
+    }
+
+    // 글자 하나 칠 때마다 추정 테이블을 다시 훑지 않도록 메뉴/매크로가 바뀔 때만 계산한다.
+    val estimate = remember(meal.menuText, meal.macros) { meal.estimate }
+    estimate?.let { est ->
+        Column(Modifier.padding(top = 8.dp)) {
+            Text(
+                "어림값 (참고용): ${formatMacros(est)}",
+                style = MaterialTheme.typography.bodySmall
+            )
+            TextButton(onClick = onAcceptEstimate) { Text("이 값으로 채우기") }
+        }
+    }
+}
+
+private fun formatFoodQuantity(food: DraftMealFood): String {
+    val qty = food.amountGram?.let { "${it.roundToInt()}g" } ?: "×${formatNumber(food.multiplier)}"
+    return "$qty · ${formatMacros(food.macros)}"
+}
+
+private fun formatNumber(value: Double): String =
+    if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString()
 
 private fun formatMacros(m: Macros): String =
     "약 ${m.kcal?.roundToInt() ?: 0}kcal · 단백질 ${m.protein?.roundToInt() ?: 0}g · " +
