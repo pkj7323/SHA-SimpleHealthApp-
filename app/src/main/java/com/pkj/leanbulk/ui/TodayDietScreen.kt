@@ -74,7 +74,9 @@ fun TodayDietScreen(vm: MainViewModel) {
     var showTargetDialog by remember { mutableStateOf(false) }
     var showSaveTemplate by remember { mutableStateOf(false) }
     var foodPickerFor by remember { mutableStateOf<Int?>(null) }
+    var savePresetFor by remember { mutableStateOf<Int?>(null) }
     var pendingTemplate by remember { mutableStateOf<DietTemplateWithMeals?>(null) }
+    val mealPresets by vm.mealPresets.collectAsState()
 
     val totals = remember(draft) { draft.totals() }
 
@@ -150,7 +152,8 @@ fun TodayDietScreen(vm: MainViewModel) {
                     onStartFoodBased = { vm.startFoodBasedMeal(index) },
                     onAddFood = { foodPickerFor = index },
                     onRemoveFood = { foodIndex -> vm.removeFoodFromMeal(index, foodIndex) },
-                    onMoveFood = { from, to -> vm.moveFoodInMeal(index, from, to) }
+                    onMoveFood = { from, to -> vm.moveFoodInMeal(index, from, to) },
+                    onSaveAsPreset = { savePresetFor = index }
                 )
             }
         }
@@ -222,7 +225,14 @@ fun TodayDietScreen(vm: MainViewModel) {
         if (draft.getOrNull(index)?.isFoodBased == true) {
             FoodQuantityPickerDialog(
                 foods = foods,
+                mealPresets = mealPresets,
                 onConfirm = { food, multiplier -> vm.addFoodToMeal(index, food, multiplier) },
+                onPickPreset = { vm.addPresetToMeal(index, it) },
+                onDeletePreset = vm::deleteMealPreset,
+                onToggleFavorite = vm::toggleFoodFavorite,
+                onAddNewFood = { name, category, macros, baseAmountGram ->
+                    vm.addNewFood(name, category, macros, baseAmountGram)
+                },
                 onHide = vm::hideFood,
                 onDismiss = { foodPickerFor = null }
             )
@@ -236,6 +246,16 @@ fun TodayDietScreen(vm: MainViewModel) {
         }
     }
 
+    savePresetFor?.let { index ->
+        TextInputDialog(
+            title = "이 조합을 세트로 저장",
+            label = "내 식사 이름",
+            initial = "",
+            confirmText = "저장",
+            onConfirm = { vm.saveMealAsPreset(index, it); savePresetFor = null },
+            onDismiss = { savePresetFor = null }
+        )
+    }
 }
 
 @Composable
@@ -287,7 +307,8 @@ private fun MealCard(
     onStartFoodBased: () -> Unit,
     onAddFood: () -> Unit,
     onRemoveFood: (Int) -> Unit,
-    onMoveFood: (Int, Int) -> Unit
+    onMoveFood: (Int, Int) -> Unit,
+    onSaveAsPreset: () -> Unit
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
@@ -307,7 +328,7 @@ private fun MealCard(
             }
 
             if (meal.isFoodBased) {
-                FoodBasedMealBody(meal, onAddFood, onRemoveFood, onMoveFood)
+                FoodBasedMealBody(meal, onAddFood, onRemoveFood, onMoveFood, onSaveAsPreset)
             } else {
                 LegacyMealBody(meal, onChange, onPickFood, onAcceptEstimate, onStartFoodBased)
             }
@@ -324,7 +345,8 @@ private fun FoodBasedMealBody(
     meal: DraftMeal,
     onAddFood: () -> Unit,
     onRemoveFood: (Int) -> Unit,
-    onMoveFood: (Int, Int) -> Unit
+    onMoveFood: (Int, Int) -> Unit,
+    onSaveAsPreset: () -> Unit
 ) {
     Column(Modifier.padding(top = 8.dp)) {
         meal.foods.forEachIndexed { index, food ->
@@ -353,7 +375,16 @@ private fun FoodBasedMealBody(
             }
         }
 
-        OutlinedButton(onClick = onAddFood, modifier = Modifier.padding(top = 4.dp)) { Text("음식 추가") }
+        Row(
+            Modifier.fillMaxWidth().padding(top = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(onClick = onAddFood) { Text("음식 추가") }
+            // 담긴 음식이 있어야 세트로 저장할 게 있다.
+            if (meal.foods.isNotEmpty()) {
+                OutlinedButton(onClick = onSaveAsPreset) { Text("이 조합을 세트로 저장") }
+            }
+        }
 
         if (meal.foods.isNotEmpty()) {
             Text(

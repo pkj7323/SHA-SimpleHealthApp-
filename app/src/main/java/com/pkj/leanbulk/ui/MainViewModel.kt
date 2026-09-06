@@ -11,6 +11,8 @@ import com.pkj.leanbulk.data.FoodItem
 import com.pkj.leanbulk.data.MacroSource
 import com.pkj.leanbulk.data.Macros
 import com.pkj.leanbulk.data.MealEntry
+import com.pkj.leanbulk.data.MealPresetFood
+import com.pkj.leanbulk.data.MealPresetWithFoods
 import com.pkj.leanbulk.data.Repository
 import com.pkj.leanbulk.data.RoutineWithExercises
 import com.pkj.leanbulk.data.SeedData
@@ -112,6 +114,9 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
 
     val foods: StateFlow<List<FoodItem>> =
         repository.observeFoods().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val mealPresets: StateFlow<List<MealPresetWithFoods>> =
+        repository.observeMealPresets().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** 종목 선택 목록. */
     val exercises: StateFlow<List<Exercise>> =
@@ -499,6 +504,76 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
             if (from !in meal.foods.indices || to !in meal.foods.indices || from == to) meal
             else meal.copy(foods = meal.foods.toMutableList().apply { add(to, removeAt(from)) }).recomputeFromFoods()
         }
+    }
+
+    fun toggleFoodFavorite(food: FoodItem) {
+        viewModelScope.launch { repository.setFoodFavorite(food.id, !food.favorite) }
+    }
+
+    /** "직접 등록"으로 카탈로그에 새 음식을 만든다. 만든 음식은 곧바로 수량을 정해 담을 수 있게 돌려준다. */
+    suspend fun addNewFood(name: String, category: String, macros: Macros, baseAmountGram: Double?): FoodItem =
+        repository.addUserFood(name, category, macros, baseAmountGram)
+
+    /**
+     * "내 식사"(식사세트)를 끼니에 통째로 담는다.
+     *
+     * `foodId`가 살아 있으면 **그 순간 카탈로그 값으로 다시 계산한다**(DIET-REDESIGN.md §9.3) —
+     * 저장해둔 뒤 카탈로그 값이 바뀌었을 수 있어서다. 카탈로그에서 지워졌으면(`foodId`가 이제
+     * 없거나 못 찾으면) 세트에 저장해둔 매크로 스냅샷을 그대로 쓴다.
+     */
+    fun addPresetToMeal(mealIndex: Int, preset: MealPresetWithFoods) {
+        val catalogById = foods.value.associateBy { it.id }
+        val newFoods = preset.foods.sortedBy { it.orderIndex }.map { f ->
+            val catalogFood = f.foodId?.let { catalogById[it] }
+            if (catalogFood != null) {
+                catalogFood.toDraftMealFood(f.multiplier)
+            } else {
+                DraftMealFood(
+                    foodId = null,
+                    name = f.name,
+                    multiplier = f.multiplier,
+                    amountGram = f.amountGram,
+                    macros = f.macros,
+                    macroSource = f.macroSource
+                )
+            }
+        }
+        updateMeal(mealIndex) { meal -> meal.copy(foods = meal.foods + newFoods).recomputeFromFoods() }
+    }
+
+    /** 지금 끼니에 담긴 음식 줄 그대로를 "내 식사"로 저장한다. */
+    fun saveMealAsPreset(mealIndex: Int, name: String) {
+        val trimmed = name.trim()
+        val meal = _dietDraft.value.getOrNull(mealIndex) ?: return
+        if (trimmed.isBlank() || meal.foods.isEmpty()) return
+        viewModelScope.launch {
+            repository.saveAsMealPreset(
+                trimmed,
+                meal.foods.mapIndexed { index, f ->
+                    MealPresetFood(
+                        presetId = 0,
+                        orderIndex = index,
+                        foodId = f.foodId,
+                        name = f.name,
+                        multiplier = f.multiplier,
+                        amountGram = f.amountGram,
+                        macros = f.macros,
+                        macroSource = f.macroSource
+                    )
+                }
+            )
+            _toast.value = "내 식사 '$trimmed' 저장됨"
+        }
+    }
+
+    fun renameMealPreset(id: Long, name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch { repository.renameMealPreset(id, trimmed) }
+    }
+
+    fun deleteMealPreset(id: Long) {
+        viewModelScope.launch { repository.deleteMealPreset(id) }
     }
 
     private fun scheduleDietSave() {
