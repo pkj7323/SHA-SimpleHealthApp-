@@ -35,12 +35,12 @@ import com.pkj.leanbulk.ui.MainViewModel
 import com.pkj.leanbulk.ui.TodayDietScreen
 import com.pkj.leanbulk.ui.TodayWorkoutScreen
 import com.pkj.leanbulk.ui.ViewModelFactory
-import com.pkj.leanbulk.ui.theme.LeanBulkTheme
+import com.pkj.leanbulk.ui.theme.SimpleHealthTheme
 
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels {
-        ViewModelFactory((application as LeanBulkApp).repository)
+        ViewModelFactory((application as SimpleHealthApp).repository)
     }
 
     /** 백그라운드에 있는 동안 자정이 지났을 수 있으므로 돌아올 때마다 날짜를 다시 확인한다. */
@@ -58,7 +58,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            LeanBulkTheme {
+            SimpleHealthTheme {
                 Surface {
                     RootScreen(viewModel)
                 }

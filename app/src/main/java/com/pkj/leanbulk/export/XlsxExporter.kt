@@ -42,7 +42,7 @@ object XlsxExporter {
         // 일단 임시 파일로 만든 뒤 Excel이 싫어하는 빈 요소를 걷어내고 최종 파일로 쓴다.
         val temp = File(exportDir, "raw_$stamp.xlsx")
         FileOutputStream(temp).use { out ->
-            val wb = Workbook(out, "린매스업 트래커", "1.0")
+            val wb = Workbook(out, "심플 헬스 앱", "1.0")
 
             writeWorkoutSheet(wb, workouts)
             writeExerciseListSheet(wb, routines, exercises)
@@ -301,7 +301,7 @@ object XlsxExporter {
     private fun writeHowToSheet(wb: Workbook) {
         val ws = wb.newWorksheet("사용법")
         val lines = listOf(
-            "린매스업 트래커 앱 내보내기 안내",
+            "심플 헬스 앱 내보내기 안내",
             "[ 시트 구성 ]",
             "· 운동일지 — 앱에서 기록한 종목별 세트 기록 (체크한 세트만 집계)",
             "· 종목목록 — 앱에 등록된 루틴별 기본 종목/세팅",

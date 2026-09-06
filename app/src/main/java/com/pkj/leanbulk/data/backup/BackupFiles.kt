@@ -26,7 +26,7 @@ object BackupFiles {
 
     /** 사용자가 공유하거나 다른 폴더에 저장할 백업 파일을 만든다. */
     fun writeForSharing(context: Context, snapshot: Snapshot): File {
-        val file = File(exportDir(context), "leanbulk-백업-${LocalDateTime.now().format(STAMP)}.json.gz")
+        val file = File(exportDir(context), "심플헬스앱-백업-${LocalDateTime.now().format(STAMP)}.json.gz")
         file.outputStream().use { it.write(SnapshotCodec.gzip(snapshot)) }
         return file
     }

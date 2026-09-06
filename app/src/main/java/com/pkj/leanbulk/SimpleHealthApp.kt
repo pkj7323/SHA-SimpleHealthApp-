@@ -4,7 +4,7 @@ import android.app.Application
 import com.pkj.leanbulk.data.AppDatabase
 import com.pkj.leanbulk.data.Repository
 
-class LeanBulkApp : Application() {
+class SimpleHealthApp : Application() {
     lateinit var repository: Repository
         private set
 
