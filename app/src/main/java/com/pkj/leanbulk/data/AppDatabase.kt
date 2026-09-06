@@ -230,6 +230,38 @@ internal val MIGRATION_11_12 = Migration(11, 12) { db ->
     )
 }
 
+/**
+ * 12 → 13: 즐겨찾기 + 식사세트(DIET-REDESIGN.md §9).
+ *
+ * `food_item.favorite`는 nullable이 아니라 기본값 0이 필요하다(검색 없이 즐겨찾기 탭에서
+ * 걸러 보여줘야 하는데, 기존 행이 NULL이면 그 필터링 조건이 애매해진다).
+ *
+ * `meal_preset_food`는 `meal_food`와 똑같은 모양이라 CREATE 문도 같은 컬럼 순서를 따른다
+ * (Room이 `macroSource`를 매크로 필드보다 앞에 두는 것도 동일 — `app/schemas/13.json` 참고).
+ */
+internal val MIGRATION_12_13 = Migration(12, 13) { db ->
+    db.execSQL("ALTER TABLE `food_item` ADD COLUMN `favorite` INTEGER NOT NULL DEFAULT 0")
+
+    db.execSQL(
+        "CREATE TABLE IF NOT EXISTS `meal_preset` (" +
+            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, " +
+            "`orderIndex` INTEGER NOT NULL)"
+    )
+    db.execSQL(
+        "CREATE TABLE IF NOT EXISTS `meal_preset_food` (" +
+            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `presetId` INTEGER NOT NULL, " +
+            "`orderIndex` INTEGER NOT NULL, `foodId` INTEGER, `name` TEXT NOT NULL, " +
+            "`multiplier` REAL NOT NULL, `amountGram` REAL, " +
+            "`macroSource` TEXT NOT NULL DEFAULT 'CATALOG', " +
+            "`kcal` REAL, `protein` REAL, `carbs` REAL, `fat` REAL, `sugar` REAL, " +
+            "FOREIGN KEY(`presetId`) REFERENCES `meal_preset`(`id`) " +
+            "ON UPDATE NO ACTION ON DELETE CASCADE )"
+    )
+    db.execSQL(
+        "CREATE INDEX IF NOT EXISTS `index_meal_preset_food_presetId` ON `meal_preset_food` (`presetId`)"
+    )
+}
+
 @Database(
     entities = [
         MealEntry::class,
@@ -242,12 +274,14 @@ internal val MIGRATION_11_12 = Migration(11, 12) { db ->
         DietTemplateMeal::class,
         FoodItem::class,
         MealFood::class,
+        MealPreset::class,
+        MealPresetFood::class,
         DietTarget::class,
         BodyRecord::class,
         AppMeta::class,
         Exercise::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -257,6 +291,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun routineDao(): RoutineDao
     abstract fun dietTemplateDao(): DietTemplateDao
     abstract fun foodDao(): FoodDao
+    abstract fun mealPresetDao(): MealPresetDao
     abstract fun dietTargetDao(): DietTargetDao
     abstract fun bodyRecordDao(): BodyRecordDao
     abstract fun appMetaDao(): AppMetaDao
@@ -277,11 +312,11 @@ abstract class AppDatabase : RoomDatabase() {
          */
         internal val MIGRATIONS = arrayOf(
             MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
-            MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12
+            MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13
         )
 
         /** 마이그레이션 테스트가 참조한다. `@Database`의 version과 항상 같아야 한다. */
-        internal const val VERSION = 12
+        internal const val VERSION = 13
 
         fun get(context: Context): AppDatabase =
             instance ?: synchronized(this) {

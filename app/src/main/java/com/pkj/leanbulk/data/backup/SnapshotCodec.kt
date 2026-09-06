@@ -16,6 +16,9 @@ import com.pkj.leanbulk.data.Macros
 import com.pkj.leanbulk.data.MealEntry
 import com.pkj.leanbulk.data.MealEntryWithFoods
 import com.pkj.leanbulk.data.MealFood
+import com.pkj.leanbulk.data.MealPreset
+import com.pkj.leanbulk.data.MealPresetFood
+import com.pkj.leanbulk.data.MealPresetWithFoods
 import com.pkj.leanbulk.data.RoutineExercise
 import com.pkj.leanbulk.data.RoutineSet
 import com.pkj.leanbulk.data.RoutineWithExercises
@@ -162,7 +165,25 @@ object SnapshotCodec {
         usedCount = usedCount,
         source = source.name,
         hidden = hidden,
-        baseAmountGram = baseAmountGram
+        baseAmountGram = baseAmountGram,
+        favorite = favorite
+    )
+
+    /** 세트 안 음식까지 포함해 "내 식사" 하나를 내보낸다. */
+    fun MealPresetWithFoods.toDto(foodSlugById: Map<Long, String>) = MealPresetDto(
+        name = preset.name,
+        orderIndex = preset.orderIndex,
+        foods = foods.sortedBy { it.orderIndex }.map { f ->
+            MealPresetFoodDto(
+                orderIndex = f.orderIndex,
+                foodSlug = f.foodId?.let { foodSlugById[it] },
+                name = f.name,
+                multiplier = f.multiplier,
+                amountGram = f.amountGram,
+                macros = f.macros.toDto(),
+                macroSource = f.macroSource.name
+            )
+        }
     )
 
     fun BodyRecord.toDto() = BodyRecordDto(
@@ -319,8 +340,27 @@ object SnapshotCodec {
         usedCount = usedCount,
         source = runCatching { ItemSource.valueOf(source) }.getOrDefault(ItemSource.USER),
         hidden = hidden,
-        baseAmountGram = baseAmountGram
+        baseAmountGram = baseAmountGram,
+        favorite = favorite
     )
+
+    /** "내 식사" + 그 안의 음식 줄을 되돌린다. */
+    fun MealPresetDto.toEntityPair(idBySlug: Map<String, Long>): Pair<MealPreset, List<MealPresetFood>> {
+        val entity = MealPreset(name = name, orderIndex = orderIndex)
+        val restoredFoods = foods.sortedBy { it.orderIndex }.map { f ->
+            MealPresetFood(
+                presetId = 0,
+                orderIndex = f.orderIndex,
+                foodId = f.foodSlug?.let { idBySlug[it] },
+                name = f.name,
+                multiplier = f.multiplier,
+                amountGram = f.amountGram,
+                macros = f.macros.toEntity(),
+                macroSource = runCatching { MacroSource.valueOf(f.macroSource) }.getOrDefault(MacroSource.CATALOG)
+            )
+        }
+        return entity to restoredFoods
+    }
 
     fun BodyRecordDto.toEntity() = BodyRecord(
         date = date,

@@ -280,6 +280,49 @@ class MigrationTest {
             }
     }
 
+    /**
+     * 12 → 13: 즐겨찾기 + "내 식사"(meal_preset).
+     *
+     * 기존 `food_item`은 `favorite`가 없던 행이니 0(false)으로 채워져야 하고,
+     * 새 `meal_preset_food`는 부모(`meal_preset`)에 FK로 제대로 연결돼야 한다.
+     */
+    @Test
+    fun 즐겨찾기_컬럼이_붙고_meal_preset_food가_meal_preset에_연결된다() {
+        // meal_preset은 13에서 새로 생기는 테이블이라 마이그레이션 전(버전 12)엔 존재하지 않는다.
+        // food_item.favorite처럼 "기존 행이 살아남는지"는 food_item으로만 확인한다.
+        helper.createDatabase(TEST_DB, 12).use { db ->
+            db.execSQL(
+                "INSERT INTO food_item (slug, name, category, kcal, protein, usedCount, source, hidden) " +
+                    "VALUES ('chicken-breast', '닭가슴살', '육류', 165.0, 31.0, 0, 'SEED', 0)"
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, AppDatabase.VERSION, true, *AppDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT name, favorite FROM food_item").use { c ->
+                    assertTrue("기존 음식이 사라졌다", c.moveToFirst())
+                    assertEquals("닭가슴살", c.getString(0))
+                    assertEquals("기존 행은 즐겨찾기가 아니어야 한다", 0, c.getInt(1))
+                }
+
+                // 마이그레이션 후에 새로 생긴 meal_preset/meal_preset_food가 FK로 제대로 연결되는지 확인한다.
+                db.execSQL("INSERT INTO meal_preset (id, name, orderIndex) VALUES (1, '닭가슴살 세트', 0)")
+                db.execSQL(
+                    "INSERT INTO meal_preset_food " +
+                        "(presetId, orderIndex, foodId, name, multiplier, amountGram, kcal, protein, macroSource) " +
+                        "VALUES (1, 0, 1, '닭가슴살', 1.5, 150.0, 247.5, 46.5, 'CATALOG')"
+                )
+                db.query(
+                    "SELECT mpf.name, mpf.amountGram FROM meal_preset_food mpf " +
+                        "JOIN meal_preset mp ON mp.id = mpf.presetId WHERE mp.name = '닭가슴살 세트'"
+                ).use { c ->
+                    assertTrue("세트 안 음식 줄이 부모와 안 이어졌다", c.moveToFirst())
+                    assertEquals("닭가슴살", c.getString(0))
+                    assertEquals(150.0, c.getDouble(1), 0.001)
+                }
+            }
+    }
+
     @Test
     fun 선언한_버전과_실제_DB_버전이_같다() {
         val db = helper.createDatabase(TEST_DB, AppDatabase.VERSION)

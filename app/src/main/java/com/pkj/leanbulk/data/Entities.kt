@@ -129,6 +129,8 @@ data class FoodItem(
     @ColumnInfo(defaultValue = "USER") val source: ItemSource = ItemSource.USER,
     /** 지우지 않고 숨긴다 — 지우면 다음 시드 갱신 때 slug로 되살아난다. */
     @ColumnInfo(defaultValue = "0") val hidden: Boolean = false,
+    /** 검색 없이 목록 위쪽에서 바로 찾게 한다. [MealPreset](여러 음식+수량 묶음)과는 다른 기능이다. */
+    @ColumnInfo(defaultValue = "0") val favorite: Boolean = false,
     /**
      * 이 음식 "1"에 해당하는 그램(또는 ml). [Macros]는 이 양을 기준으로 한다.
      *
@@ -189,6 +191,50 @@ fun FoodItem.toMealFood(mealEntryId: Long, orderIndex: Int, multiplier: Double):
     amountGram = baseAmountGram?.times(multiplier),
     macros = macros.scaledBy(multiplier),
     macroSource = MacroSource.CATALOG
+)
+
+/**
+ * 자주 먹는 음식 조합을 저장해뒀다가 한 번에 끼니에 담는다("내 식사" — DIET-REDESIGN.md §9.3).
+ *
+ * [DietTemplate](식단표)과 단위가 다르다. 식단표는 하루 전체(여러 끼니)의 틀이고, 이건
+ * **끼니 하나에 들어가는 음식 조합**이다.
+ */
+@Entity(tableName = "meal_preset")
+data class MealPreset(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val orderIndex: Int
+)
+
+/** 세트 안의 음식 한 줄. [MealFood]와 같은 모양이다. */
+@Entity(
+    tableName = "meal_preset_food",
+    foreignKeys = [
+        ForeignKey(
+            entity = MealPreset::class,
+            parentColumns = ["id"],
+            childColumns = ["presetId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index(value = ["presetId"])]
+)
+data class MealPresetFood(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val presetId: Long,
+    val orderIndex: Int,
+    val foodId: Long? = null,
+    val name: String,
+    val multiplier: Double,
+    val amountGram: Double? = null,
+    @androidx.room.Embedded val macros: Macros,
+    @ColumnInfo(defaultValue = "CATALOG") val macroSource: MacroSource = MacroSource.CATALOG
+)
+
+data class MealPresetWithFoods(
+    @androidx.room.Embedded val preset: MealPreset,
+    @Relation(parentColumn = "id", entityColumn = "presetId")
+    val foods: List<MealPresetFood>
 )
 
 /** 지금 뭘 하려는 중인지. 목표 칼로리를 얼마나 올리고 내릴지가 여기서 갈린다. */

@@ -31,7 +31,8 @@ data class Snapshot(
     val dietTemplates: List<DietTemplateDto> = emptyList(),
     val foods: List<FoodDto> = emptyList(),
     val bodyRecords: List<BodyRecordDto> = emptyList(),
-    val target: TargetDto? = null
+    val target: TargetDto? = null,
+    val mealPresets: List<MealPresetDto> = emptyList()
 ) {
     companion object {
         const val CURRENT_FORMAT_VERSION = 1
@@ -202,7 +203,27 @@ data class FoodDto(
     val source: String = "USER",
     val hidden: Boolean = false,
     /** 이 음식 "1"에 해당하는 그램. 실측하지 않은 음식은 null(옛 백업도 전부 null로 읽힌다). */
-    val baseAmountGram: Double? = null
+    val baseAmountGram: Double? = null,
+    val favorite: Boolean = false
+)
+
+/** "내 식사"(DIET-REDESIGN.md §9.3) — 음식 여러 개 + 수량 조합 하나. */
+@Serializable
+data class MealPresetDto(
+    val name: String,
+    val orderIndex: Int,
+    val foods: List<MealPresetFoodDto> = emptyList()
+)
+
+@Serializable
+data class MealPresetFoodDto(
+    val orderIndex: Int,
+    val foodSlug: String? = null,
+    val name: String,
+    val multiplier: Double,
+    val amountGram: Double? = null,
+    val macros: MacrosDto,
+    val macroSource: String = "CATALOG"
 )
 
 @Serializable

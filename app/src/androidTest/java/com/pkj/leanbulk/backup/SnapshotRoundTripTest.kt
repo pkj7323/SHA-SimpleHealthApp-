@@ -17,6 +17,7 @@ import com.pkj.leanbulk.data.MacroSource
 import com.pkj.leanbulk.data.Macros
 import com.pkj.leanbulk.data.MealEntry
 import com.pkj.leanbulk.data.MealFood
+import com.pkj.leanbulk.data.MealPresetFood
 import com.pkj.leanbulk.data.Repository
 import com.pkj.leanbulk.data.Routine
 import com.pkj.leanbulk.data.RoutineExercise
@@ -319,7 +320,8 @@ class SnapshotRoundTripTest {
         )
         db.foodDao().insert(
             FoodItem(
-                slug = "user-water", name = "물", macros = Macros(0.0, 0.0, 0.0, 0.0, 0.0), usedCount = 1
+                slug = "user-water", name = "물", macros = Macros(0.0, 0.0, 0.0, 0.0, 0.0), usedCount = 1,
+                favorite = true
             )
         )
 
@@ -364,6 +366,25 @@ class SnapshotRoundTripTest {
 
         db.dietTargetDao().upsert(
             DietTarget(kcal = 2600.0, protein = 165.0, carbs = 300.0, fat = 70.0, sugar = 50.0)
+        )
+
+        // "내 식사" — 카탈로그에서 온 줄 + 아직 카탈로그에 없는 줄을 섞어 slug 이어붙임까지 확인한다.
+        db.mealPresetDao().insertWithFoods(
+            "닭가슴살 세트",
+            listOf(
+                MealPresetFood(
+                    presetId = 0, orderIndex = 0, foodId = chickenId, name = "닭가슴살",
+                    multiplier = 1.5, amountGram = 150.0,
+                    macros = Macros(kcal = 247.5, protein = 46.5, carbs = 0.0, fat = 5.4, sugar = 0.0),
+                    macroSource = MacroSource.CATALOG
+                ),
+                MealPresetFood(
+                    presetId = 0, orderIndex = 1, foodId = null, name = "그릭요거트 200g",
+                    multiplier = 2.0, amountGram = null,
+                    macros = Macros(kcal = 194.0, protein = 18.0, carbs = 8.0, fat = 10.0, sugar = 8.0),
+                    macroSource = MacroSource.AI_SUGGESTED
+                )
+            )
         )
     }
 }

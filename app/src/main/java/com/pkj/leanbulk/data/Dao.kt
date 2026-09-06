@@ -125,6 +125,47 @@ interface DietTemplateDao {
 }
 
 @Dao
+interface MealPresetDao {
+
+    @Transaction
+    @Query("SELECT * FROM meal_preset ORDER BY orderIndex")
+    fun observeAll(): Flow<List<MealPresetWithFoods>>
+
+    /** 백업 내보내기용 일회성 조회. */
+    @Transaction
+    @Query("SELECT * FROM meal_preset ORDER BY orderIndex")
+    suspend fun getAll(): List<MealPresetWithFoods>
+
+    @Query("SELECT COUNT(*) FROM meal_preset")
+    suspend fun count(): Int
+
+    @Query("SELECT COALESCE(MAX(orderIndex), -1) + 1 FROM meal_preset")
+    suspend fun nextOrderIndex(): Int
+
+    @Insert
+    suspend fun insertPreset(preset: MealPreset): Long
+
+    @Insert
+    suspend fun insertFoods(foods: List<MealPresetFood>)
+
+    @Transaction
+    suspend fun insertWithFoods(name: String, foods: List<MealPresetFood>) {
+        val id = insertPreset(MealPreset(name = name, orderIndex = nextOrderIndex()))
+        if (foods.isNotEmpty()) insertFoods(foods.map { it.copy(id = 0, presetId = id) })
+    }
+
+    @Query("UPDATE meal_preset SET name = :name WHERE id = :id")
+    suspend fun rename(id: Long, name: String)
+
+    /** 자식(meal_preset_food)은 외래키 CASCADE로 같이 지워진다. */
+    @Query("DELETE FROM meal_preset WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    @Query("DELETE FROM meal_preset")
+    suspend fun deleteAll()
+}
+
+@Dao
 interface FoodDao {
     /** 음식 선택 목록. 숨긴 건 빼고, 자주 쓴 것부터 보여준다. */
     @Query("SELECT * FROM food_item WHERE hidden = 0 ORDER BY usedCount DESC, name")
@@ -142,6 +183,13 @@ interface FoodDao {
 
     @Query("UPDATE food_item SET hidden = :hidden WHERE id = :id")
     suspend fun setHidden(id: Long, hidden: Boolean)
+
+    @Query("UPDATE food_item SET favorite = :favorite WHERE id = :id")
+    suspend fun setFavorite(id: Long, favorite: Boolean)
+
+    /** "직접 등록"에서 쓴다. 새로 만든 항목의 id가 바로 필요하므로 [insert]와 달리 값을 돌려준다. */
+    @Insert
+    suspend fun insertReturningId(item: FoodItem): Long
 
     @Query("DELETE FROM food_item")
     suspend fun deleteAll()

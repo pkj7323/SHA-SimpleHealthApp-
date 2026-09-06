@@ -24,6 +24,7 @@ class Repository(private val db: AppDatabase) {
     private val bodyRecordDao = db.bodyRecordDao()
     private val appMetaDao = db.appMetaDao()
     private val exerciseDao = db.exerciseDao()
+    private val mealPresetDao = db.mealPresetDao()
 
     // ---------- 시드 ----------
 
@@ -160,6 +161,32 @@ class Repository(private val db: AppDatabase) {
 
     suspend fun hideFood(id: Long) = foodDao.setHidden(id, true)
 
+    suspend fun setFoodFavorite(id: Long, favorite: Boolean) = foodDao.setFavorite(id, favorite)
+
+    /** "직접 등록" — 검색해도 없는 새 음식을 카탈로그에 바로 추가한다. 종목의 [addUserExercise]와 같은 자리. */
+    suspend fun addUserFood(name: String, category: String, macros: Macros, baseAmountGram: Double?): FoodItem {
+        val entity = FoodItem(
+            slug = "user-" + name.trim().lowercase().replace(Regex("\\s+"), "-") + "-" + System.currentTimeMillis(),
+            name = name.trim(),
+            category = category,
+            macros = macros,
+            source = ItemSource.USER,
+            baseAmountGram = baseAmountGram
+        )
+        return entity.copy(id = foodDao.insertReturningId(entity))
+    }
+
+    // ---------- 내 식사(식사세트) ----------
+
+    fun observeMealPresets(): Flow<List<MealPresetWithFoods>> = mealPresetDao.observeAll()
+
+    suspend fun saveAsMealPreset(name: String, foods: List<MealPresetFood>) =
+        mealPresetDao.insertWithFoods(name, foods)
+
+    suspend fun renameMealPreset(id: Long, name: String) = mealPresetDao.rename(id, name)
+
+    suspend fun deleteMealPreset(id: Long) = mealPresetDao.delete(id)
+
     // ---------- 섭취 목표 ----------
 
     fun observeTarget(): Flow<DietTarget?> = dietTargetDao.observe()
@@ -280,7 +307,8 @@ class Repository(private val db: AppDatabase) {
             dietTemplates = dietTemplateDao.getAll().map { it.toDto() },
             foods = foodDao.getAll().map { it.toDto() },
             bodyRecords = bodyRecordDao.getAll().map { it.toDto() },
-            target = dietTargetDao.get()?.toDto()
+            target = dietTargetDao.get()?.toDto(),
+            mealPresets = mealPresetDao.getAll().map { it.toDto(foodSlugById) }
         )
     }
 
@@ -299,6 +327,7 @@ class Repository(private val db: AppDatabase) {
         foodDao.deleteAll()
         bodyRecordDao.deleteAll()
         exerciseDao.deleteAll()
+        mealPresetDao.deleteAll()
 
         // 카탈로그를 먼저 넣어야 기록·루틴이 slug로 이어 붙을 수 있다.
         val idBySlug = snapshot.exercises.associate { dto ->
@@ -334,6 +363,12 @@ class Repository(private val db: AppDatabase) {
 
         snapshot.bodyRecords.forEach { bodyRecordDao.upsert(it.toEntity()) }
         snapshot.target?.let { dietTargetDao.upsert(it.toEntity()) }
+
+        snapshot.mealPresets.forEach { dto ->
+            val (preset, foods) = dto.toEntityPair(foodIdBySlug)
+            val id = mealPresetDao.insertPreset(preset)
+            if (foods.isNotEmpty()) mealPresetDao.insertFoods(foods.map { it.copy(presetId = id) })
+        }
 
         // 시드 버전도 같이 넘어와야, 옛 백업을 불러왔을 때 다음 실행에서 밀린 시드가 채워진다.
         appMetaDao.upsert(AppMeta(seedVersion = snapshot.seedVersion))
