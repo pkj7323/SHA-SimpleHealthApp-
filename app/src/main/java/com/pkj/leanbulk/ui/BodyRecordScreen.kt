@@ -187,15 +187,15 @@ private fun BodyRecordForm(
             Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            NullableNumberField("체중(kg)", weight, ::onWeightChange)
+            NullableNumberField("체중(kg)", weight, onValueChange = ::onWeightChange)
             NullableNumberField("골격근량", muscle) { muscle = it }
-            NullableNumberField("체지방량", fatMass, ::onFatMassChange)
+            NullableNumberField("체지방량", fatMass, onValueChange = ::onFatMassChange)
         }
         Row(
             Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            NullableNumberField("체지방률%", fatPercent, ::onFatPercentChange)
+            NullableNumberField("체지방률%", fatPercent, onValueChange = ::onFatPercentChange)
             NullableNumberField("허리(cm)", waist) { waist = it }
         }
 

@@ -116,12 +116,12 @@ class SelectiveMergeTest {
     fun 기존_루틴과_기록이_그대로_남는다() = runBlocking {
         repo.applySeeds()
         val beforeRoutines = repo.observeRoutines().first().size
-        val beforeTemplates = repo.observeDietTemplates().first().size
+        val beforeTemplates = db.dietTemplateDao().getAll().size
 
         repo.mergeFromSnapshot(listOf(theirExercise), listOf(theirRoutine), emptyList(), emptyList())
 
         assertEquals(beforeRoutines + 1, repo.observeRoutines().first().size)
-        assertEquals("식단표는 건드리지 않았는데 바뀌었다", beforeTemplates, repo.observeDietTemplates().first().size)
+        assertEquals("식단표는 건드리지 않았는데 바뀌었다", beforeTemplates, db.dietTemplateDao().getAll().size)
     }
 
     /**
@@ -148,7 +148,7 @@ class SelectiveMergeTest {
     @Test
     fun 식단표만_골라_가져올_수_있다() = runBlocking {
         repo.applySeeds()
-        val before = repo.observeDietTemplates().first().size
+        val before = db.dietTemplateDao().getAll().size
 
         val result = repo.mergeFromSnapshot(
             catalog = emptyList(),
@@ -167,7 +167,7 @@ class SelectiveMergeTest {
 
         assertEquals(1, result.dietTemplates)
         assertEquals(0, result.routines)
-        val templates = repo.observeDietTemplates().first()
+        val templates = db.dietTemplateDao().getAll()
         assertEquals(before + 1, templates.size)
         assertEquals(1, templates.first { it.template.name == "남의 식단표" }.meals.size)
     }

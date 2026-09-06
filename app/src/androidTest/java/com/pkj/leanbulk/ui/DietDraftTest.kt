@@ -28,7 +28,7 @@ class DietDraftTest {
     @Test
     fun 음식_줄_매크로를_더해서_끼니_요약을_다시_계산한다() {
         val meal = DraftMeal(
-            slotName = "점심", menuText = "", isFoodBased = true,
+            slotName = "점심",
             foods = listOf(
                 food("닭가슴살", kcal = 247.5, protein = 46.5, gram = 150.0),
                 food("현미밥", kcal = 300.0, protein = 6.0, gram = 200.0)
@@ -45,7 +45,7 @@ class DietDraftTest {
     @Test
     fun 그램_모르는_음식은_요약에_배수로_적힌다() {
         val meal = DraftMeal(
-            slotName = "저녁", menuText = "", isFoodBased = true,
+            slotName = "저녁",
             foods = listOf(food("김밥", kcal = 800.0, protein = 20.0, gram = null, multiplier = 2.0))
         ).recomputeFromFoods()
 
@@ -59,7 +59,7 @@ class DietDraftTest {
     @Test
     fun 한_줄이라도_모르면_합계도_모른다() {
         val meal = DraftMeal(
-            slotName = "간식", menuText = "", isFoodBased = true,
+            slotName = "간식",
             foods = listOf(
                 food("아몬드", kcal = 87.0, protein = null, gram = 15.0),
                 food("바나나", kcal = 105.0, protein = 1.3, gram = null)
@@ -73,7 +73,7 @@ class DietDraftTest {
     /** 음식을 다 지우면 다시 "모름"이 된다(0으로 남으면 "정말 0을 먹음"과 헷갈린다). */
     @Test
     fun 음식이_없으면_매크로도_모름이다() {
-        val meal = DraftMeal(slotName = "점심", menuText = "", isFoodBased = true, foods = emptyList())
+        val meal = DraftMeal(slotName = "점심", foods = emptyList())
             .recomputeFromFoods()
 
         assertTrue(meal.macros.isEmpty)
@@ -81,14 +81,44 @@ class DietDraftTest {
         assertEquals("", meal.menuText)
     }
 
-    /** 옛 자유 텍스트 끼니는 이 함수가 손대면 안 된다 — 사람이 직접 적은 값이다. */
     @Test
-    fun 옛_방식_끼니는_recompute해도_그대로다() {
-        val legacy = DraftMeal(
-            slotName = "아침", menuText = "손으로 적은 메뉴",
-            macros = Macros(kcal = 300.0), macroSource = MacroSource.ENTERED
+    fun 저장된_게_없어도_고정_네_칸이_나온다() {
+        val slots = emptyList<DraftMeal>().intoFixedSlots()
+
+        assertEquals(listOf("아침", "점심", "저녁", "간식"), slots.map { it.slotName })
+        assertTrue("빈 칸에 뭔가 들어있으면 안 된다", slots.all { it.foods.isEmpty() && it.menuText.isBlank() })
+    }
+
+    /** 이름이 같은 기록은 그 칸에 들어가야 한다. 순서가 뒤죽박죽이어도 마찬가지다. */
+    @Test
+    fun 저장된_끼니가_이름이_같은_칸에_들어간다() {
+        val saved = listOf(
+            DraftMeal(slotName = "저녁", foods = listOf(food("닭가슴살", 165.0, 31.0, 100.0))),
+            DraftMeal(slotName = "아침", menuText = "햇반")
         )
 
-        assertEquals(legacy, legacy.recomputeFromFoods())
+        val slots = saved.intoFixedSlots()
+
+        assertEquals(listOf("아침", "점심", "저녁", "간식"), slots.map { it.slotName })
+        assertEquals("햇반", slots[0].menuText)
+        assertEquals(1, slots[2].foods.size)
+    }
+
+    /**
+     * 고정 칸 이름과 안 맞는 기록(옛날에 "끼니 1" 식으로 만든 것, 나중에 추가한 5번째 끼니)은
+     * 뒤에 그대로 붙는다 — 화면 구조가 바뀌었다고 남의 기록을 지우면 안 된다.
+     */
+    @Test
+    fun 이름이_안_맞는_기록은_뒤에_그대로_붙는다() {
+        val saved = listOf(
+            DraftMeal(slotName = "끼니 1", menuText = "옛날 기록"),
+            DraftMeal(slotName = "야식", menuText = "라면")
+        )
+
+        val slots = saved.intoFixedSlots()
+
+        assertEquals(6, slots.size)
+        assertEquals(listOf("끼니 1", "야식"), slots.drop(4).map { it.slotName })
+        assertEquals("옛날 기록", slots[4].menuText)
     }
 }

@@ -111,21 +111,19 @@ class Repository(private val db: AppDatabase) {
     suspend fun hasMealRecord(date: String): Boolean = mealDao.countForDate(date) > 0
 
     /**
-     * 하루치 식단을 저장한다. 자유 텍스트 끼니와 음식 줄이 있는 끼니가 같은 날짜에
-     * 섞여 있어도 된다(DIET-REDESIGN.md §3) — 음식 줄이 없는 항목은 그냥 옛 방식 그대로 저장된다.
+     * 하루치 식단을 저장한다.
      *
-     * **음식 줄이 없는 끼니만** "내 음식 목록"에 쌓는다. 음식 줄이 있는 끼니는 이미
-     * 카탈로그(`foodId`)에서 왔으니 다시 기억할 이유가 없다.
+     * 예전에는 자유 텍스트로 적은 끼니를 통째로 "내 음식 목록"에 기억시켰는데
+     * (`"잡곡밥 150g + 소고기 150g + 야채"` 같은 것이 음식 하나로 쌓였다), 끼니를 음식 줄로만
+     * 채우게 되면서 그 경로를 없앴다 — 한 끼니 전체는 음식이 아니라 조합이고, 조합은
+     * "내 식사"([saveAsMealPreset])가 담당한다.
      */
-    suspend fun saveMealDay(date: String, entries: List<Pair<MealEntry, List<MealFood>>>) {
+    suspend fun saveMealDay(date: String, entries: List<Pair<MealEntry, List<MealFood>>>) =
         mealDao.replaceDayWithFoods(date, entries)
-        entries.filter { (entry, foods) -> foods.isEmpty() && entry.menuText.isNotBlank() && !entry.macros.isEmpty }
-            .forEach { (entry, _) -> foodDao.remember(entry.menuText.trim(), entry.macros) }
-    }
 
     // ---------- 식단표 ----------
-
-    fun observeDietTemplates(): Flow<List<DietTemplateWithMeals>> = dietTemplateDao.observeAll()
+    // 화면에서는 뺐다(하루 전체 틀 → 끼니 단위 "내 식사"로 통합). 저장된 데이터와 백업 경로는
+    // 그대로 두므로 예전에 만들어둔 식단표가 백업 파일에서 사라지지는 않는다.
 
     suspend fun ensureDietTemplatesSeeded() {
         if (dietTemplateDao.count() > 0) return
@@ -142,18 +140,6 @@ class Repository(private val db: AppDatabase) {
             }
         )
     }
-
-    suspend fun addDietTemplate(name: String) = dietTemplateDao.insertWithMeals(name, emptyList())
-
-    suspend fun renameDietTemplate(id: Long, name: String) = dietTemplateDao.rename(id, name)
-
-    suspend fun deleteDietTemplate(id: Long) = dietTemplateDao.delete(id)
-
-    suspend fun overwriteDietTemplate(id: Long, meals: List<DietTemplateMeal>) =
-        dietTemplateDao.replaceMeals(id, meals)
-
-    suspend fun saveAsNewDietTemplate(name: String, meals: List<DietTemplateMeal>) =
-        dietTemplateDao.insertWithMeals(name, meals)
 
     // ---------- 내 음식 목록 ----------
 

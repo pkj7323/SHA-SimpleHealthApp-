@@ -183,7 +183,12 @@ fun TextInputDialog(
  * 영양정보처럼 모를 수 있는 값에 쓴다.
  */
 @Composable
-fun NullableNumberField(label: String, value: Double?, onValueChange: (Double?) -> Unit) {
+fun NullableNumberField(
+    label: String,
+    value: Double?,
+    modifier: Modifier = Modifier.width(96.dp),
+    onValueChange: (Double?) -> Unit
+) {
     var text by remember(value) { mutableStateOf(value?.let(::formatNumber) ?: "") }
     OutlinedTextField(
         value = text,
@@ -194,7 +199,7 @@ fun NullableNumberField(label: String, value: Double?, onValueChange: (Double?) 
         label = { Text(label) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        modifier = Modifier.width(96.dp)
+        modifier = modifier
     )
 }
 

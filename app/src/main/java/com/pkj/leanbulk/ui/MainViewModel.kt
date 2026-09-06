@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pkj.leanbulk.data.BodyRecord
 import com.pkj.leanbulk.data.DietTarget
-import com.pkj.leanbulk.data.DietTemplateWithMeals
 import com.pkj.leanbulk.data.Exercise
 import com.pkj.leanbulk.data.ExerciseWithSets
 import com.pkj.leanbulk.data.FoodItem
@@ -40,9 +39,6 @@ private val TIME_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
 /** 편집이 멈춘 뒤 이만큼 지나면 저장한다. */
 private const val SAVE_DELAY_MS = 700L
-
-/** 기록이 없는 날짜를 열면 기본으로 띄우는 끼니 4개(DIET-REDESIGN.md §9.1). */
-private val DEFAULT_MEAL_SLOT_NAMES = listOf("아침", "점심", "저녁", "간식")
 
 class MainViewModel(private val repository: Repository) : ViewModel() {
 
@@ -92,9 +88,6 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
     val dietDate: StateFlow<String> = _dietDate
     private var dietDatePicked = false
 
-    private val _dietTemplateName = MutableStateFlow("")
-    val dietTemplateName: StateFlow<String> = _dietTemplateName
-
     private val _dietDraft = MutableStateFlow<List<DraftMeal>>(emptyList())
     val dietDraft: StateFlow<List<DraftMeal>> = _dietDraft
 
@@ -111,9 +104,6 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
 
     val routines: StateFlow<List<RoutineWithExercises>> =
         repository.observeRoutines().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val dietTemplates: StateFlow<List<DietTemplateWithMeals>> =
-        repository.observeDietTemplates().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val foods: StateFlow<List<FoodItem>> =
         repository.observeFoods().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -387,115 +377,39 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
     }
 
     /**
-     * 저장된 게 없는 날짜를 열면 아침·점심·저녁·간식 4칸을 기본으로 채워둔다(DIET-REDESIGN.md §9.1,
-     * 인아웃 참고). 아무것도 안 건드리면 [scheduleDietSave]가 안 불려서 DB에는 안 남는다 —
-     * 그냥 열어만 봐도 빈 끼니 4개가 생기면 안 되기 때문이다. 5번째부터는 기존 "끼니 추가"로 만든다.
+     * 아침·점심·저녁·간식 네 칸은 저장된 기록이 있든 없든 **항상** 띄운다(DIET-REDESIGN.md §9.1).
+     * 아무것도 안 담으면 [scheduleDietSave]가 안 불려서 DB에는 안 남는다 — 그냥 열어만 봐도
+     * 빈 끼니가 생기면 안 되기 때문이다. 5번째부터는 "끼니 추가"(+ 버튼)로 만든다.
      */
     private fun loadDietDraft(date: String) {
         viewModelScope.launch {
             val saved = repository.observeMealsWithFoods(date).first()
-            _dietDraft.value = if (saved.isEmpty()) {
-                DEFAULT_MEAL_SLOT_NAMES.map { DraftMeal(slotName = it, menuText = "") }
-            } else {
-                saved.sortedBy { it.entry.orderIndex }.map { it.toDraft() }
-            }
-            if (saved.isEmpty()) _dietTemplateName.value = ""
+            _dietDraft.value = saved.sortedBy { it.entry.orderIndex }.map { it.toDraft() }.intoFixedSlots()
         }
     }
 
-    fun loadDietTemplate(template: DietTemplateWithMeals) {
-        _dietTemplateName.value = template.template.name
-        _dietDraft.value = template.meals.sortedBy { it.orderIndex }.map { it.toDraft() }
-        scheduleDietSave()
-    }
-
-    fun addDietTemplate(name: String) {
-        if (name.isBlank()) return
-        viewModelScope.launch { repository.addDietTemplate(name.trim()) }
-    }
-
-    fun renameDietTemplate(id: Long, name: String) {
-        if (name.isBlank()) return
-        viewModelScope.launch { repository.renameDietTemplate(id, name.trim()) }
-    }
-
-    fun deleteDietTemplate(id: Long) {
-        viewModelScope.launch { repository.deleteDietTemplate(id) }
-    }
-
-    /** 지금 화면의 끼니 구성을 식단표로 저장한다. */
-    fun saveCurrentAsTemplate(name: String) {
-        if (name.isBlank() || !_dietDraft.value.hasContent()) return
-        viewModelScope.launch {
-            repository.saveAsNewDietTemplate(name.trim(), _dietDraft.value.toTemplateMeals())
-            _dietTemplateName.value = name.trim()
-            _toast.value = "식단표 '${name.trim()}' 저장됨"
-        }
-    }
-
-    fun overwriteTemplate(templateId: Long, templateName: String) {
-        viewModelScope.launch {
-            repository.overwriteDietTemplate(templateId, _dietDraft.value.toTemplateMeals())
-            _toast.value = "식단표 '$templateName' 갱신됨"
-        }
-    }
-
+    /** 5번째 이후의 끼니(야식 등)를 만든다. 기본 네 칸은 [intoFixedSlots]가 늘 채워둔다. */
     fun addMeal(slotName: String) {
         val name = slotName.ifBlank { "끼니 ${_dietDraft.value.size + 1}" }
-        _dietDraft.value = _dietDraft.value + DraftMeal(slotName = name.trim(), menuText = "")
+        _dietDraft.value = _dietDraft.value + DraftMeal(slotName = name.trim())
         scheduleDietSave()
     }
 
+    /** 추가로 만든 끼니만 지운다. 고정 네 칸은 화면에서 삭제 버튼 자체를 안 준다. */
     fun removeMeal(index: Int) {
+        if (index < FIXED_MEAL_SLOTS.size) return
         _dietDraft.value = _dietDraft.value.filterIndexed { i, _ -> i != index }
         scheduleDietSave()
     }
 
-    fun updateMeal(index: Int, transform: (DraftMeal) -> DraftMeal) {
+    private fun updateMeal(index: Int, transform: (DraftMeal) -> DraftMeal) {
         _dietDraft.value = _dietDraft.value.mapIndexed { i, m -> if (i == index) transform(m) else m }
         scheduleDietSave()
-    }
-
-    /**
-     * 음식 카탈로그에서 고른 값을 해당 끼니에 채워 넣는다.
-     * 카탈로그 값은 **일반적인 1인분**이라 내가 먹은 양과 다를 수 있으므로 출처를 남긴다.
-     */
-    fun applyFood(index: Int, food: FoodItem) {
-        updateMeal(index) {
-            it.copy(
-                menuText = food.name,
-                macros = food.macros,
-                macroSource = if (food.macros.isEmpty) MacroSource.NONE else MacroSource.CATALOG
-            )
-        }
-    }
-
-    /**
-     * 어림값을 실제 값으로 확정한다.
-     * **어디까지나 메뉴 이름으로 때려맞춘 값**이므로 출처를 남겨서 직접 잰 값과 섞이지 않게 한다.
-     */
-    fun acceptEstimate(index: Int) {
-        updateMeal(index) { meal ->
-            meal.estimate?.let { meal.copy(macros = it, macroSource = MacroSource.ESTIMATED) } ?: meal
-        }
     }
 
     /** 목록에서 치운다. 시드 음식은 지우면 다음 갱신 때 되살아나므로 숨김으로 처리한다. */
     fun hideFood(id: Long) {
         viewModelScope.launch { repository.hideFood(id) }
-    }
-
-    /**
-     * 빈 끼니를 음식 줄 방식으로 바꾼다.
-     *
-     * 이미 텍스트를 적었거나 음식이 있으면 아무 일도 안 한다 — 자동 변환은 없다
-     * (DIET-REDESIGN.md §8). 이 함수는 "아직 아무것도 안 적은 끼니"에서만 의미가 있다.
-     */
-    fun startFoodBasedMeal(index: Int) {
-        updateMeal(index) { meal ->
-            if (meal.menuText.isNotBlank() || !meal.macros.isEmpty || meal.foods.isNotEmpty()) meal
-            else meal.copy(isFoodBased = true)
-        }
     }
 
     fun addFoodToMeal(index: Int, food: FoodItem, multiplier: Double) {

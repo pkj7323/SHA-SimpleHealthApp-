@@ -85,10 +85,7 @@ class FoodQuantityPickerTest {
             MaterialTheme {
                 FoodQuantityPickerDialog(
                     foods = listOf(chicken, gimbap),
-                    mealPresets = emptyList(),
                     onConfirm = { food, multiplier -> picked = food to multiplier },
-                    onPickPreset = {},
-                    onDeletePreset = {},
                     onToggleFavorite = {},
                     onAddNewFood = { _, _, _, _ -> chicken },
                     onHide = {},

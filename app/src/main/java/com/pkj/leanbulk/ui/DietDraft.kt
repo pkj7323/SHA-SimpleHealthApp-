@@ -1,8 +1,6 @@
 package com.pkj.leanbulk.ui
 
-import com.pkj.leanbulk.data.DietTemplateMeal
 import com.pkj.leanbulk.data.FoodItem
-import com.pkj.leanbulk.data.MacroEstimator
 import com.pkj.leanbulk.data.MacroSource
 import com.pkj.leanbulk.data.Macros
 import com.pkj.leanbulk.data.MealEntry
@@ -30,43 +28,21 @@ fun FoodItem.toDraftMealFood(multiplier: Double): DraftMealFood = DraftMealFood(
     macroSource = MacroSource.CATALOG
 )
 
-/** 화면에서 편집 중인 끼니 한 줄. 아직 저장 전 상태. */
+/**
+ * 화면에서 편집 중인 끼니 한 줄. 아직 저장 전 상태.
+ *
+ * 끼니는 이제 **음식 줄의 합**으로만 채운다. [menuText]·[macros]는 그 합을 그대로 복사해둔
+ * 값이라 사람이 직접 고치지 않는다([recomputeFromFoods]) — 다만 자유 텍스트로 적던 시절의
+ * 기록을 불러오면 그때 적어둔 문장이 [menuText]에 남아 있고, 음식을 담기 전까지 그대로 보여준다.
+ */
 data class DraftMeal(
     val slotName: String,
-    val menuText: String,
+    val menuText: String = "",
     val macros: Macros = Macros(),
-    val eaten: Boolean = false,
     /** 이 매크로가 어디서 온 값인가. 비어 있으면 [MacroSource.NONE]. */
     val macroSource: MacroSource = MacroSource.NONE,
-    /** 음식 줄들. 채워져 있으면 새 방식이다 — 자세한 건 [isFoodBased] 참고. */
-    val foods: List<DraftMealFood> = emptyList(),
-    /**
-     * 새 방식(음식 줄)으로 편집 중인지.
-     *
-     * `foods.isNotEmpty()`만으로 판단하지 않는 이유: 막 새 방식을 고르고 아직 음식을 하나도
-     * 안 담았을 때도 새 방식 화면을 보여줘야 하는데, 그 순간엔 `foods`가 비어 있다.
-     */
-    val isFoodBased: Boolean = foods.isNotEmpty()
-) {
-    /**
-     * 매크로를 직접 넣지 않았을 때만 쓰는 참고용 어림값. 새 방식 끼니에는 안 쓴다 —
-     * 매크로가 늘 카탈로그에서 계산되어 있어서 "모름"이 나올 일이 없다.
-     */
-    val estimate: Macros? get() = if (!isFoodBased && macros.isEmpty) MacroEstimator.estimate(menuText) else null
-}
-
-/**
- * 사용자가 숫자를 직접 고칠 때 쓴다. **출처를 같이 바꿔야** 카탈로그에서 채운 값이나
- * 확정한 어림값을 손으로 고쳤을 때 표시가 옛것으로 남지 않는다.
- * 전부 지우면 다시 "모름"이 된다.
- */
-fun DraftMeal.editMacros(transform: (Macros) -> Macros): DraftMeal {
-    val next = transform(macros)
-    return copy(
-        macros = next,
-        macroSource = if (next.isEmpty) MacroSource.NONE else MacroSource.ENTERED
-    )
-}
+    val foods: List<DraftMealFood> = emptyList()
+)
 
 /**
  * 음식 줄이 바뀐 뒤 끼니 요약(메뉴 텍스트·매크로·출처)을 다시 계산한다.
@@ -74,16 +50,13 @@ fun DraftMeal.editMacros(transform: (Macros) -> Macros): DraftMeal {
  * 이렇게 **`meal_entry` 컬럼 자체에 합계를 그대로 채워 넣어 두는 이유**는, 히스토리·
  * xlsx 내보내기·오늘 섭취 합계가 전부 `MealEntry.macros`/`menuText`를 직접 읽기
  * 때문이다. 음식 줄(`meal_food`)은 그 값의 "근거"이지, 저 화면들이 새로 알아야 하는
- * 별도 데이터가 아니다 — 덕분에 이번 개편에서 그 화면들을 하나도 안 건드려도 된다.
+ * 별도 데이터가 아니다.
  */
-fun DraftMeal.recomputeFromFoods(): DraftMeal {
-    if (!isFoodBased) return this
-    return copy(
-        menuText = foods.summaryText(),
-        macros = foods.summedMacros(),
-        macroSource = if (foods.isEmpty()) MacroSource.NONE else MacroSource.CATALOG
-    )
-}
+fun DraftMeal.recomputeFromFoods(): DraftMeal = copy(
+    menuText = foods.summaryText(),
+    macros = foods.summedMacros(),
+    macroSource = if (foods.isEmpty()) MacroSource.NONE else MacroSource.CATALOG
+)
 
 private fun List<DraftMealFood>.summaryText(): String = joinToString(" + ") { f ->
     val qty = f.amountGram?.let { "${it.roundToInt()}g" } ?: "×${formatMultiplier(f.multiplier)}"
@@ -113,65 +86,58 @@ private fun List<DraftMealFood>.summedMacros(): Macros {
     )
 }
 
-/** 하루 합계. 직접 입력한 값만 더한 것과, 어림값까지 더한 것을 분리해서 들고 있다. */
+/** 하루 합계. [unknownCount]는 영양정보를 모르는 채로 담긴 끼니 수다. */
 data class DietTotals(
     val entered: Macros,
-    val estimatedExtra: Macros?,
     val unknownCount: Int
 )
 
-/** 체크한 끼니만 집계한다. 매크로가 없는 끼니는 어림값 쪽으로 따로 모은다. */
+/**
+ * 담긴 끼니를 전부 더한다.
+ *
+ * 예전엔 "먹었다" 체크를 한 끼니만 셌지만, 끼니 칸이 아침·점심·저녁·간식으로 고정되면서
+ * 그 체크는 없앴다 — 안 먹었으면 음식을 안 담으면 되기 때문에 따로 표시할 이유가 없다.
+ */
 fun List<DraftMeal>.totals(): DietTotals {
-    val eaten = filter { it.eaten }
-
     var kcal = 0.0; var protein = 0.0; var carbs = 0.0; var fat = 0.0; var sugar = 0.0
-    var eKcal = 0.0; var eProtein = 0.0; var eCarbs = 0.0; var eFat = 0.0; var eSugar = 0.0
-    var hasEstimate = false
     var unknown = 0
 
-    eaten.forEach { meal ->
+    forEach { meal ->
         if (!meal.macros.isEmpty) {
             kcal += meal.macros.kcal ?: 0.0
             protein += meal.macros.protein ?: 0.0
             carbs += meal.macros.carbs ?: 0.0
             fat += meal.macros.fat ?: 0.0
             sugar += meal.macros.sugar ?: 0.0
-        } else {
+        } else if (meal.foods.isNotEmpty() || meal.menuText.isNotBlank()) {
+            // 아무것도 안 담은 빈 칸은 "모름"이 아니다. 담긴 게 있는데 값을 모를 때만 센다.
             unknown++
-            val est = meal.estimate
-            if (est != null) {
-                hasEstimate = true
-                eKcal += est.kcal ?: 0.0
-                eProtein += est.protein ?: 0.0
-                eCarbs += est.carbs ?: 0.0
-                eFat += est.fat ?: 0.0
-                eSugar += est.sugar ?: 0.0
-            }
         }
     }
 
-    return DietTotals(
-        entered = Macros(kcal, protein, carbs, fat, sugar),
-        estimatedExtra = if (hasEstimate) Macros(eKcal, eProtein, eCarbs, eFat, eSugar) else null,
-        unknownCount = unknown
-    )
+    return DietTotals(entered = Macros(kcal, protein, carbs, fat, sugar), unknownCount = unknown)
 }
 
-/**
- * 아직 아무것도 안 적은 끼니뿐인지. 기본으로 채워둔 아침/점심/저녁/간식(§9.1)은 그 자체로는
- * "내용"이 아니므로, 식단표를 불러올 때 갈아엎기 확인을 띄울지 판단하는 데 쓴다 —
- * `isEmpty()`만 보면 이 기본 4칸 때문에 매번 확인 창이 뜬다.
- */
-fun List<DraftMeal>.hasContent(): Boolean =
-    any { it.menuText.isNotBlank() || !it.macros.isEmpty || it.foods.isNotEmpty() }
+/** 화면에 늘 띄워두는 끼니 칸(DIET-REDESIGN.md §9.1). 이름은 고치지 않는다. */
+val FIXED_MEAL_SLOTS = listOf("아침", "점심", "저녁", "간식")
 
-fun DietTemplateMeal.toDraft(): DraftMeal = DraftMeal(
-    slotName = slotName,
-    menuText = menuText,
-    macros = macros,
-    // 식단표는 출처를 담지 않는다. 계획 단계의 값이라 사용자가 넣은 것으로 본다.
-    macroSource = if (macros.isEmpty) MacroSource.NONE else MacroSource.ENTERED
-)
+/**
+ * 저장된 끼니를 고정 칸에 끼워 맞춘다.
+ *
+ * 저장된 게 있든 없든 [FIXED_MEAL_SLOTS] 네 칸은 **항상** 자리를 차지한다. 예전 기록은
+ * 이름이 같은 칸에 들어가고, 이름이 안 맞는 것(옛날에 "끼니 1" 식으로 만들어둔 것,
+ * 사용자가 나중에 추가한 5번째 끼니)은 뒤에 그대로 붙는다 — 화면 구조가 바뀌었다고
+ * 남의 기록을 지우지 않는다.
+ */
+fun List<DraftMeal>.intoFixedSlots(): List<DraftMeal> {
+    val leftovers = toMutableList()
+    val fixed = FIXED_MEAL_SLOTS.map { name ->
+        val match = leftovers.firstOrNull { it.slotName == name }
+        if (match != null) leftovers.remove(match)
+        match ?: DraftMeal(slotName = name)
+    }
+    return fixed + leftovers
+}
 
 /**
  * 끼니 + 그 안의 음식 줄을 화면 상태로 옮긴다.
@@ -192,13 +158,17 @@ fun MealEntryWithFoods.toDraft(): DraftMeal {
         slotName = entry.slotName,
         menuText = entry.menuText,
         macros = entry.macros,
-        eaten = entry.eaten,
         macroSource = entry.macroSource,
         foods = draftFoods
     )
 }
 
-/** 화면의 끼니 목록을 저장 가능한 (끼니, 음식 줄들) 쌍으로 편다. */
+/**
+ * 화면의 끼니 목록을 저장 가능한 (끼니, 음식 줄들) 쌍으로 편다.
+ *
+ * `eaten`은 늘 참으로 저장한다 — "먹었다" 체크를 없앴으므로, 담긴 끼니는 곧 먹은 끼니다.
+ * 히스토리·xlsx가 아직 이 칸을 읽기 때문에 컬럼 자체는 남겨둔다.
+ */
 fun List<DraftMeal>.toMealEntryPairs(date: String): List<Pair<MealEntry, List<MealFood>>> =
     mapIndexed { index, m ->
         val entry = MealEntry(
@@ -207,7 +177,7 @@ fun List<DraftMeal>.toMealEntryPairs(date: String): List<Pair<MealEntry, List<Me
             slotName = m.slotName,
             menuText = m.menuText,
             macros = m.macros,
-            eaten = m.eaten,
+            eaten = true,
             macroSource = m.macroSource
         )
         val foods = m.foods.mapIndexed { foodIndex, f ->
@@ -224,13 +194,3 @@ fun List<DraftMeal>.toMealEntryPairs(date: String): List<Pair<MealEntry, List<Me
         }
         entry to foods
     }
-
-fun List<DraftMeal>.toTemplateMeals(): List<DietTemplateMeal> = mapIndexed { index, m ->
-    DietTemplateMeal(
-        templateId = 0,
-        orderIndex = index,
-        slotName = m.slotName,
-        menuText = m.menuText,
-        macros = m.macros
-    )
-}

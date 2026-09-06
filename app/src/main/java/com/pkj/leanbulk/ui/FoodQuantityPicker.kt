@@ -1,5 +1,6 @@
 package com.pkj.leanbulk.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,35 +36,31 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pkj.leanbulk.data.FoodItem
 import com.pkj.leanbulk.data.Macros
-import com.pkj.leanbulk.data.MealPresetWithFoods
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private enum class FoodPickerTab(val label: String) {
-    SEARCH("검색"), FAVORITE("즐겨찾기"), PRESET("식사세트")
+    SEARCH("검색"), FAVORITE("즐겨찾기")
 }
 
 /**
  * 음식을 고르고 배수로 양을 정한다(DIET-REDESIGN.md 2·9단계).
  *
- * 검색·즐겨찾기·식사세트 세 탭으로 나뉜다(인아웃 참고, §9.7). 검색 탭에서 음식을 고르면
- * [FoodQuantityDialog]로 넘어간다. 확정하면 검색 목록으로 **돌아온다** — 한 끼니에 음식을
- * 여러 개 담는 게 자연스러운 흐름이라, 매번 처음부터 다시 열 필요가 없다. 완전히 닫으려면
- * "닫기"를 누른다.
+ * 검색·즐겨찾기 두 탭이다. 음식을 고르면 [FoodQuantityDialog]로 넘어가고, 확정하면 목록으로
+ * **돌아온다** — 한 끼니에 음식을 여러 개 담는 게 자연스러운 흐름이라, 매번 처음부터 다시
+ * 열 필요가 없다. 완전히 닫으려면 "닫기"를 누른다.
  *
- * 식사세트는 고르는 즉시 끼니에 통째로 담기고([onPickPreset]) 수량 단계를 거치지 않는다 —
- * 이미 배수가 정해진 조합이기 때문이다.
+ * 여러 음식 묶음("내 식사")은 여기 없다 — 그건 음식 하나가 아니라 조합이라, 끼니 카드의
+ * "내 식사" 버튼에서 따로 담는다.
  */
 @Composable
 fun FoodQuantityPickerDialog(
     foods: List<FoodItem>,
-    mealPresets: List<MealPresetWithFoods>,
     onConfirm: (FoodItem, Double) -> Unit,
-    onPickPreset: (MealPresetWithFoods) -> Unit,
-    onDeletePreset: (Long) -> Unit,
     onToggleFavorite: (FoodItem) -> Unit,
     onAddNewFood: suspend (name: String, category: String, macros: Macros, baseAmountGram: Double?) -> FoodItem,
     onHide: (Long) -> Unit,
@@ -127,11 +124,6 @@ fun FoodQuantityPickerDialog(
                         foods = foods.filter { it.favorite },
                         onPick = { selected = it },
                         onToggleFavorite = onToggleFavorite
-                    )
-                    FoodPickerTab.PRESET -> MealPresetTab(
-                        presets = mealPresets,
-                        onPick = onPickPreset,
-                        onDelete = onDeletePreset
                     )
                 }
             }
@@ -255,6 +247,12 @@ private fun FavoriteFoodTab(
     }
 }
 
+/**
+ * 음식 한 줄.
+ *
+ * 이름 칸을 [TextButton] 대신 그냥 눌리는 [Row]로 만든 이유: 버튼은 높이가 정해져 있어서
+ * 이름이 길어 두 줄로 넘어가면 아래가 잘렸다(옛 자유 텍스트 기록에서 넘어온 긴 이름들).
+ */
 @Composable
 private fun FoodRow(
     food: FoodItem,
@@ -273,50 +271,18 @@ private fun FoodRow(
                 Icon(Icons.Outlined.StarBorder, contentDescription = "즐겨찾기 추가")
             }
         }
-        TextButton(onClick = onPick, modifier = Modifier.weight(1f)) {
-            Column(Modifier.fillMaxWidth()) {
-                Text(food.name)
-                Text(formatMacroSummary(food.macros), style = MaterialTheme.typography.bodySmall)
-            }
-        }
-        trailing?.invoke()
-    }
-}
-
-@Composable
-private fun MealPresetTab(
-    presets: List<MealPresetWithFoods>,
-    onPick: (MealPresetWithFoods) -> Unit,
-    onDelete: (Long) -> Unit
-) {
-    Column(Modifier.padding(top = 8.dp)) {
-        if (presets.isEmpty()) {
+        Column(
+            Modifier.weight(1f).clickable(onClick = onPick).padding(vertical = 10.dp, horizontal = 4.dp)
+        ) {
+            Text(food.name, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
-                "저장된 내 식사가 없습니다. 끼니에 음식을 담은 뒤 \"이 조합을 세트로 저장\"으로 만들 수 있습니다.",
-                style = MaterialTheme.typography.bodySmall
+                formatMacroSummary(food.macros),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
         }
-        LazyColumn(Modifier.heightIn(max = 360.dp)) {
-            items(presets, key = { it.preset.id }) { preset ->
-                Row(
-                    Modifier.fillMaxWidth().testTag("meal_preset_row_${preset.preset.id}"),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(onClick = { onPick(preset) }, modifier = Modifier.weight(1f)) {
-                        Column(Modifier.fillMaxWidth()) {
-                            Text(preset.preset.name)
-                            Text(
-                                preset.foods.joinToString(" + ") { it.name },
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                    IconButton(onClick = { onDelete(preset.preset.id) }) {
-                        Icon(Icons.Filled.Delete, contentDescription = "내 식사 삭제")
-                    }
-                }
-            }
-        }
+        trailing?.invoke()
     }
 }
 
@@ -375,7 +341,8 @@ private fun DirectRegisterFoodDialog(
     onDismiss: () -> Unit
 ) {
     var name by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("기타") }
+    // 비워두면 "기타"로 저장한다. 미리 채워두면 지우고 쓰는 사람이 매번 지워야 한다.
+    var category by remember { mutableStateOf("") }
     var kcal by remember { mutableStateOf<Double?>(null) }
     var protein by remember { mutableStateOf<Double?>(null) }
     var carbs by remember { mutableStateOf<Double?>(null) }
@@ -399,6 +366,7 @@ private fun DirectRegisterFoodDialog(
                     value = category,
                     onValueChange = { category = it },
                     label = { Text("분류") },
+                    placeholder = { Text("기타") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 )
@@ -417,7 +385,17 @@ private fun DirectRegisterFoodDialog(
                     NullableNumberField("지방", fat) { fat = it }
                     NullableNumberField("당", sugar) { sugar = it }
                 }
-                NullableNumberField("기준량(g, 아는 경우만)", baseAmountGram) { baseAmountGram = it }
+                NullableNumberField(
+                    label = "기준량(g)",
+                    value = baseAmountGram,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    onValueChange = { baseAmountGram = it }
+                )
+                Text(
+                    "위 영양정보가 몇 g 기준인지. 모르면 비워두세요 — 그때는 배수(×1, ×2)로만 담깁니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             }
         },
         confirmButton = {
@@ -432,6 +410,8 @@ private fun DirectRegisterFoodDialog(
     )
 }
 
-private fun formatMacroSummary(m: Macros): String =
-    "${m.kcal?.roundToInt() ?: 0}kcal · 단백질 ${m.protein?.roundToInt() ?: 0}g · " +
-        "탄수 ${m.carbs?.roundToInt() ?: 0}g · 지방 ${m.fat?.roundToInt() ?: 0}g"
+/** 모르는 값은 0이 아니라 `?`로 적는다 — 0kcal이라고 적어두면 사실이 아닌 값이 기록으로 남는다. */
+private fun formatMacroSummary(m: Macros): String {
+    fun v(value: Double?) = value?.roundToInt()?.toString() ?: "?"
+    return "${v(m.kcal)}kcal · 단백질 ${v(m.protein)}g · 탄수 ${v(m.carbs)}g · 지방 ${v(m.fat)}g"
+}

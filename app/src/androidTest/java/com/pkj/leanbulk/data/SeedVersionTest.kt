@@ -47,7 +47,7 @@ class SeedVersionTest {
         repo.applySeeds()
 
         assertTrue("기본 루틴이 안 깔렸다", repo.observeRoutines().first().isNotEmpty())
-        assertTrue("기본 식단표가 안 깔렸다", repo.observeDietTemplates().first().isNotEmpty())
+        assertTrue("기본 식단표가 안 깔렸다", db.dietTemplateDao().getAll().isNotEmpty())
         assertTrue("기본 목표가 안 깔렸다", repo.observeTarget().first() != null)
         assertEquals(SeedData.VERSION, repo.seedVersion())
     }
