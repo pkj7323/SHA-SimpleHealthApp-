@@ -38,6 +38,39 @@ interface MealDao {
         deleteByDate(date)
         insertAll(entries.map { it.copy(id = 0, date = date) })
     }
+
+    // ---------- 음식 줄(meal_food)이 있는 새 방식 끼니 ----------
+
+    @Insert
+    suspend fun insertEntry(entry: MealEntry): Long
+
+    @Insert
+    suspend fun insertFoods(foods: List<MealFood>)
+
+    @Transaction
+    @Query("SELECT * FROM meal_entry WHERE date = :date ORDER BY orderIndex")
+    fun observeByDateWithFoods(date: String): Flow<List<MealEntryWithFoods>>
+
+    /** 백업 내보내기용 일회성 조회. */
+    @Transaction
+    @Query("SELECT * FROM meal_entry ORDER BY date, orderIndex")
+    suspend fun getAllWithFoods(): List<MealEntryWithFoods>
+
+    /**
+     * 해당 날짜의 식단 기록을 음식 줄까지 포함해 통째로 새로 저장한다.
+     * [replaceDay]와 같은 패턴이다([WorkoutDao.replaceDay] 참고) — 끼니를 하나씩 넣고
+     * 돌려받은 id를 그 음식 줄들에 붙인다.
+     */
+    @Transaction
+    suspend fun replaceDayWithFoods(date: String, entries: List<Pair<MealEntry, List<MealFood>>>) {
+        deleteByDate(date)
+        entries.forEach { (entry, foods) ->
+            val id = insertEntry(entry.copy(id = 0, date = date))
+            if (foods.isNotEmpty()) {
+                insertFoods(foods.map { it.copy(id = 0, mealEntryId = id) })
+            }
+        }
+    }
 }
 
 @Dao
@@ -125,7 +158,14 @@ interface FoodDao {
         val bySlug = findBySlug(seed.slug)
         if (bySlug != null) {
             if (bySlug.source == ItemSource.SEED) {
-                update(bySlug.copy(name = seed.name, category = seed.category, macros = seed.macros))
+                update(
+                    bySlug.copy(
+                        name = seed.name,
+                        category = seed.category,
+                        macros = seed.macros,
+                        baseAmountGram = seed.baseAmountGram
+                    )
+                )
             }
             return
         }

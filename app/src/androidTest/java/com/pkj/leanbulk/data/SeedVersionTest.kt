@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -177,14 +178,51 @@ class SeedVersionTest {
      */
     @Test
     fun 이름이_겹치면_사용자_음식을_지킨다() = runBlocking {
-        // 시드가 깔리기 전에 사용자가 같은 이름으로 먼저 쌓아둔 상황
-        db.foodDao().remember("닭가슴살 100g", Macros(kcal = 999.0, protein = 99.0))
+        // 시드가 깔리기 전에 사용자가 같은 이름으로 먼저 쌓아둔 상황.
+        // 시드 카탈로그의 이름은 "닭가슴살"이다(제공량을 뗐다 — DIET-REDESIGN.md).
+        db.foodDao().remember("닭가슴살", Macros(kcal = 999.0, protein = 99.0))
 
         repo.applySeeds()
 
-        val mine = repo.observeFoods().first().first { it.name == "닭가슴살 100g" }
+        val mine = repo.observeFoods().first().first { it.name == "닭가슴살" }
         assertEquals("사용자가 적은 값이 시드로 덮어써졌다", 999.0, mine.macros.kcal!!, 0.0)
         assertEquals(ItemSource.USER, mine.source)
+    }
+
+    /**
+     * 음식 이름에서 제공량을 떼고 [FoodItem.baseAmountGram]으로 옮긴 시드 4단계.
+     * 실제로 잰 값이 있는 것만 채워지고, 없는 건 지어내지 않아야 한다.
+     */
+    @Test
+    fun 음식_기준량이_아는_것만_채워진다() = runBlocking {
+        repo.applySeeds()
+        val foods = repo.observeFoods().first()
+
+        val chicken = foods.first { it.name == "닭가슴살" }
+        assertEquals("100g으로 적혀 있던 음식은 기준량을 알아야 한다", 100.0, chicken.baseAmountGram!!, 0.0)
+
+        val gimbap = foods.first { it.name == "김밥" }
+        assertNull("\"1줄\"은 그램을 몰라서 지어내면 안 된다", gimbap.baseAmountGram)
+    }
+
+    /**
+     * 시드 재적용이 이름뿐 아니라 기준량도 갱신하는지. 이 앱 전체가 재적용을 "멱등"이라고
+     * 가정하므로(`applySeeds`의 각 단계는 여러 번 돌아도 결과가 같아야 한다), 시드
+     * 버전을 올리면서 이름을 바꾼 경우가 실제로 반영되는지 확인해야 한다.
+     */
+    @Test
+    fun 시드_재적용시_이름과_기준량이_갱신된다() = runBlocking {
+        repo.applySeeds()
+        val before = repo.observeFoods().first().first { it.slug == "chicken-breast-100g" }
+        assertEquals("닭가슴살", before.name)
+        assertEquals(100.0, before.baseAmountGram!!, 0.0)
+
+        db.appMetaDao().upsert(AppMeta(seedVersion = 0))
+        repo.applySeeds()
+
+        val after = repo.observeFoods().first().first { it.slug == "chicken-breast-100g" }
+        assertEquals("재적용해도 SEED 항목은 같은 값으로 남아야 한다", "닭가슴살", after.name)
+        assertEquals(100.0, after.baseAmountGram!!, 0.0)
     }
 
     @Test

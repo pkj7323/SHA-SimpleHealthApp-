@@ -144,7 +144,8 @@ object SnapshotCodec {
         macros = macros.toDto(),
         usedCount = usedCount,
         source = source.name,
-        hidden = hidden
+        hidden = hidden,
+        baseAmountGram = baseAmountGram
     )
 
     fun BodyRecord.toDto() = BodyRecordDto(
@@ -282,7 +283,8 @@ object SnapshotCodec {
         macros = macros.toEntity(),
         usedCount = usedCount,
         source = runCatching { ItemSource.valueOf(source) }.getOrDefault(ItemSource.USER),
-        hidden = hidden
+        hidden = hidden,
+        baseAmountGram = baseAmountGram
     )
 
     fun BodyRecordDto.toEntity() = BodyRecord(

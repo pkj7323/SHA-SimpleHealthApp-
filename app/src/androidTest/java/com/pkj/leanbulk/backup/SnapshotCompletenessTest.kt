@@ -60,7 +60,8 @@ class SnapshotCompletenessTest {
         assertFields<DietTemplateMeal>("id", "templateId", "orderIndex", "slotName", "menuText", "macros")
 
         assertFields<FoodItem>(
-            "id", "slug", "name", "category", "macros", "usedCount", "source", "hidden"
+            "id", "slug", "name", "category", "macros", "usedCount", "source", "hidden",
+            "baseAmountGram"
         )
         assertFields<AppMeta>("id", "seedVersion")
         assertFields<Exercise>(

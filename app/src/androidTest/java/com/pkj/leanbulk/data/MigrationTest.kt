@@ -231,6 +231,55 @@ class MigrationTest {
             }
     }
 
+    /**
+     * 11 → 12: 음식이 g 단위로 계산된다.
+     *
+     * 두 가지를 확인한다 — 기존 `food_item` 행이 살아남고(새 컬럼은 NULL로),
+     * 새로 생긴 `meal_food`가 부모(`meal_entry`)에 제대로 연결되는지.
+     */
+    @Test
+    fun 음식_기준량_컬럼이_붙고_meal_food가_meal_entry에_연결된다() {
+        var mealEntryId = 0L
+        helper.createDatabase(TEST_DB, 11).use { db ->
+            db.execSQL(
+                "INSERT INTO food_item (slug, name, category, kcal, protein, usedCount, source, hidden) " +
+                    "VALUES ('chicken-breast-100g', '닭가슴살 100g', '육류', 165.0, 31.0, 0, 'SEED', 0)"
+            )
+            db.execSQL(
+                "INSERT INTO meal_entry (date, orderIndex, slotName, menuText, eaten, memo, macroSource) " +
+                    "VALUES ('2026-09-06', 0, '점심', '', 1, '', 'ENTERED')"
+            )
+            db.query("SELECT id FROM meal_entry").use { c ->
+                assertTrue(c.moveToFirst())
+                mealEntryId = c.getLong(0)
+            }
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, AppDatabase.VERSION, true, *AppDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT name, baseAmountGram FROM food_item").use { c ->
+                    assertTrue("기존 음식이 사라졌다", c.moveToFirst())
+                    assertEquals("닭가슴살 100g", c.getString(0))
+                    assertTrue("기준량이 새로 생겼는데 값이 있으면 안 된다(지어낸 값)", c.isNull(1))
+                }
+
+                // meal_food를 하나 넣어서 FK가 실제로 걸리는지 확인한다.
+                db.execSQL(
+                    "INSERT INTO meal_food " +
+                        "(mealEntryId, orderIndex, foodId, name, multiplier, amountGram, kcal, protein, macroSource) " +
+                        "VALUES ($mealEntryId, 0, 1, '닭가슴살', 1.5, 150.0, 247.5, 46.5, 'CATALOG')"
+                )
+                db.query(
+                    "SELECT mf.name, mf.amountGram FROM meal_food mf " +
+                        "JOIN meal_entry me ON me.id = mf.mealEntryId WHERE me.date = '2026-09-06'"
+                ).use { c ->
+                    assertTrue("음식 줄이 부모 끼니와 안 이어졌다", c.moveToFirst())
+                    assertEquals("닭가슴살", c.getString(0))
+                    assertEquals(150.0, c.getDouble(1), 0.001)
+                }
+            }
+    }
+
     @Test
     fun 선언한_버전과_실제_DB_버전이_같다() {
         val db = helper.createDatabase(TEST_DB, AppDatabase.VERSION)

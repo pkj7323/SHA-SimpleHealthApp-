@@ -180,7 +180,9 @@ data class FoodDto(
     val macros: MacrosDto,
     val usedCount: Int,
     val source: String = "USER",
-    val hidden: Boolean = false
+    val hidden: Boolean = false,
+    /** 이 음식 "1"에 해당하는 그램. 실측하지 않은 음식은 null(옛 백업도 전부 null로 읽힌다). */
+    val baseAmountGram: Double? = null
 )
 
 @Serializable

@@ -65,6 +65,12 @@ class Repository(private val db: AppDatabase) {
             SeedData.foodCatalog.forEach { foodDao.upsertSeed(it.toEntity()) }
         }
 
+        if (applied < 4) {
+            // 음식 이름에서 제공량을 떼고 baseAmountGram으로 옮겼다(DIET-REDESIGN.md).
+            // upsertSeed가 멱등이라 다시 돌려도 기존 SEED 행의 이름·기준량만 갱신된다.
+            SeedData.foodCatalog.forEach { foodDao.upsertSeed(it.toEntity()) }
+        }
+
         appMetaDao.upsert(AppMeta(seedVersion = SeedData.VERSION))
     }
 
@@ -108,6 +114,18 @@ class Repository(private val db: AppDatabase) {
         entries.filter { it.menuText.isNotBlank() && !it.macros.isEmpty }
             .forEach { foodDao.remember(it.menuText.trim(), it.macros) }
     }
+
+    // ---------- 음식 줄이 있는 새 방식 끼니 ----------
+
+    fun observeMealsWithFoods(date: String): Flow<List<MealEntryWithFoods>> =
+        mealDao.observeByDateWithFoods(date)
+
+    /**
+     * 음식 줄까지 포함해 하루치 식단을 저장한다. 옛 [saveMealDay]와 달리 "내 음식 목록"에
+     * 다시 쌓지 않는다 — 음식이 이미 카탈로그(`foodId`)에서 왔으니 다시 기억할 이유가 없다.
+     */
+    suspend fun saveMealDayWithFoods(date: String, entries: List<Pair<MealEntry, List<MealFood>>>) =
+        mealDao.replaceDayWithFoods(date, entries)
 
     // ---------- 식단표 ----------
 

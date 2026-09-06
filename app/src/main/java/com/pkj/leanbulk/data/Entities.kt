@@ -19,10 +19,22 @@ data class Macros(
     val sugar: Double? = null
 ) {
     val isEmpty: Boolean get() = kcal == null && protein == null && carbs == null && fat == null && sugar == null
+
+    /**
+     * 배수만큼 늘린 매크로. `null`("모름")은 배수를 곱해도 그대로 `null`이다 —
+     * 모르는 값에 배수를 곱해서 새로운 숫자를 만들어내면 안 된다.
+     */
+    fun scaledBy(multiplier: Double): Macros = Macros(
+        kcal = kcal?.times(multiplier),
+        protein = protein?.times(multiplier),
+        carbs = carbs?.times(multiplier),
+        fat = fat?.times(multiplier),
+        sugar = sugar?.times(multiplier)
+    )
 }
 
 /**
- * 이 끼니의 매크로가 **어디서 온 값인가.**
+ * 이 매크로가 **어디서 온 값인가.**
  *
  * 셋을 구분하지 않으면 [MacroEstimator]가 메뉴 이름만 보고 만든 어림값이 사용자가 직접
  * 잰 값과 같은 무게로 취급된다. 합계에 섞이고, 나중에 AI가 읽으면 **추정치를 사실로
@@ -33,10 +45,12 @@ enum class MacroSource {
     NONE,
     /** 사용자가 직접 숫자를 넣음 */
     ENTERED,
-    /** 음식 카탈로그에서 채움 — 일반적인 1인분 값이라 내 실제 양과 다를 수 있다 */
+    /** 음식 카탈로그에서 채움 — 카탈로그 기준량 × 배수로 계산된 값 */
     CATALOG,
-    /** 메뉴 이름으로 어림한 값을 확정한 것 — 셋 중 가장 약하다 */
-    ESTIMATED
+    /** 메뉴 이름으로 어림한 값을 확정한 것 */
+    ESTIMATED,
+    /** AI가 방금 제안한 음식으로 기록한 값 — 모델이 기억으로 뱉은 숫자라 가장 약하다 */
+    AI_SUGGESTED
 }
 
 /** 하루 한 끼니의 실제 기록. 끼니 이름은 고정이 아니라 자유롭게 추가·삭제된다. */
@@ -114,7 +128,67 @@ data class FoodItem(
     val usedCount: Int = 1,
     @ColumnInfo(defaultValue = "USER") val source: ItemSource = ItemSource.USER,
     /** 지우지 않고 숨긴다 — 지우면 다음 시드 갱신 때 slug로 되살아난다. */
-    @ColumnInfo(defaultValue = "0") val hidden: Boolean = false
+    @ColumnInfo(defaultValue = "0") val hidden: Boolean = false,
+    /**
+     * 이 음식 "1"에 해당하는 그램(또는 ml). [Macros]는 이 양을 기준으로 한다.
+     *
+     * **실제로 잰 값을 알 때만 채운다.** "김밥 1줄" 같은 항목은 그램을 모르므로 null로
+     * 남긴다 — 여기서 숫자를 지어내면 이 앱이 지키는 "모르면 모른다"는 원칙이 스키마
+     * 단계에서부터 깨진다. null이면 배수만으로 기록하고 그램 표시는 하지 않는다.
+     */
+    val baseAmountGram: Double? = null
+)
+
+/**
+ * 끼니 안의 음식 한 줄.
+ *
+ * 매크로는 [FoodItem]의 기준값 × [multiplier]를 그 순간 계산해 **스냅샷으로 저장한다.**
+ * 카탈로그 값을 나중에 고쳐도 과거 기록이 흔들리면 안 된다 — 운동 기록이 그 시점의
+ * `trackingType`을 복사해두는 것과 같은 이유([WorkoutExercise.trackingType]).
+ */
+@Entity(
+    tableName = "meal_food",
+    foreignKeys = [
+        ForeignKey(
+            entity = MealEntry::class,
+            parentColumns = ["id"],
+            childColumns = ["mealEntryId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index(value = ["mealEntryId"])]
+)
+data class MealFood(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val mealEntryId: Long,
+    val orderIndex: Int,
+    /** 카탈로그 항목이 지워져도 과거 기록은 남아야 하므로 nullable([WorkoutExercise.exerciseName]과 같은 패턴). */
+    val foodId: Long? = null,
+    val name: String,
+    val multiplier: Double,
+    /** [FoodItem.baseAmountGram]이 null이면 이것도 null — 배수만 있고 그램은 표시하지 않는다. */
+    val amountGram: Double? = null,
+    @androidx.room.Embedded val macros: Macros,
+    @ColumnInfo(defaultValue = "CATALOG") val macroSource: MacroSource = MacroSource.CATALOG
+)
+
+/** 끼니 + 그 안의 음식 줄들. */
+data class MealEntryWithFoods(
+    @androidx.room.Embedded val entry: MealEntry,
+    @Relation(parentColumn = "id", entityColumn = "mealEntryId")
+    val foods: List<MealFood>
+)
+
+/** 카탈로그 값 × 배수로 음식 줄 하나를 만든다. */
+fun FoodItem.toMealFood(mealEntryId: Long, orderIndex: Int, multiplier: Double): MealFood = MealFood(
+    mealEntryId = mealEntryId,
+    orderIndex = orderIndex,
+    foodId = id,
+    name = name,
+    multiplier = multiplier,
+    amountGram = baseAmountGram?.times(multiplier),
+    macros = macros.scaledBy(multiplier),
+    macroSource = MacroSource.CATALOG
 )
 
 /** 지금 뭘 하려는 중인지. 목표 칼로리를 얼마나 올리고 내릴지가 여기서 갈린다. */

@@ -200,6 +200,36 @@ internal val MIGRATION_10_11 = Migration(10, 11) { db ->
     )
 }
 
+/**
+ * 11 → 12: 음식이 g 단위로 계산된다 (`meal_food` 추가, `food_item`에 기준량 추가).
+ *
+ * 지금까지 끼니는 자유 텍스트 한 덩어리라 "이 끼니에 어떤 음식이 얼마나 들었나"가
+ * 안 남았다. 그래서 음식 단위 집계도, 배수로 양을 조절하는 것도 불가능했다.
+ *
+ * 기존 `food_item`·`meal_entry` 행은 그대로 둔다. `baseAmountGram`은 nullable이라
+ * 기본값 없이 컬럼만 추가하면 기존 행은 전부 NULL(그램 모름)로 남는다 — 시드 음식은
+ * 시드 재적용(applySeeds 4단계)에서 실제로 아는 값만 채워진다.
+ *
+ * `CREATE TABLE`은 `app/schemas/12.json`의 `createSql`을 그대로 옮긴 것이다.
+ */
+internal val MIGRATION_11_12 = Migration(11, 12) { db ->
+    db.execSQL("ALTER TABLE `food_item` ADD COLUMN `baseAmountGram` REAL")
+
+    db.execSQL(
+        "CREATE TABLE IF NOT EXISTS `meal_food` (" +
+            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `mealEntryId` INTEGER NOT NULL, " +
+            "`orderIndex` INTEGER NOT NULL, `foodId` INTEGER, `name` TEXT NOT NULL, " +
+            "`multiplier` REAL NOT NULL, `amountGram` REAL, " +
+            "`macroSource` TEXT NOT NULL DEFAULT 'CATALOG', " +
+            "`kcal` REAL, `protein` REAL, `carbs` REAL, `fat` REAL, `sugar` REAL, " +
+            "FOREIGN KEY(`mealEntryId`) REFERENCES `meal_entry`(`id`) " +
+            "ON UPDATE NO ACTION ON DELETE CASCADE )"
+    )
+    db.execSQL(
+        "CREATE INDEX IF NOT EXISTS `index_meal_food_mealEntryId` ON `meal_food` (`mealEntryId`)"
+    )
+}
+
 @Database(
     entities = [
         MealEntry::class,
@@ -211,12 +241,13 @@ internal val MIGRATION_10_11 = Migration(10, 11) { db ->
         DietTemplate::class,
         DietTemplateMeal::class,
         FoodItem::class,
+        MealFood::class,
         DietTarget::class,
         BodyRecord::class,
         AppMeta::class,
         Exercise::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -246,11 +277,11 @@ abstract class AppDatabase : RoomDatabase() {
          */
         internal val MIGRATIONS = arrayOf(
             MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
-            MIGRATION_9_10, MIGRATION_10_11
+            MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12
         )
 
         /** 마이그레이션 테스트가 참조한다. `@Database`의 version과 항상 같아야 한다. */
-        internal const val VERSION = 11
+        internal const val VERSION = 12
 
         fun get(context: Context): AppDatabase =
             instance ?: synchronized(this) {
