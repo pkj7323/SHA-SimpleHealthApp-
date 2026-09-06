@@ -36,7 +36,8 @@ class SnapshotCompletenessTest {
     fun 엔티티_필드가_바뀌면_스냅샷_DTO도_손봐야_한다() {
         assertFields<Macros>("kcal", "protein", "carbs", "fat", "sugar")
 
-        assertFields<MealEntry>("id", "date", "orderIndex", "slotName", "menuText", "macros", "eaten", "memo")
+        assertFields<MealEntry>("id", "date", "orderIndex", "slotName", "menuText", "macros", "eaten", "memo",
+            "macroSource")
 
         assertFields<WorkoutExercise>(
             "id", "date", "routineName", "orderIndex", "exerciseId", "exerciseName",

@@ -198,6 +198,39 @@ class MigrationTest {
             }
     }
 
+    /**
+     * 10 → 11: 끼니 매크로의 출처 컬럼이 붙는다.
+     *
+     * 기존 행은 갈라낼 수 없어 전부 `ENTERED`가 되지만, **매크로가 비어 있던 행까지
+     * `ENTERED`로 두면 "모름"이 "직접 0을 입력함"처럼 보인다.** 그건 바로잡아야 한다.
+     */
+    @Test
+    fun 끼니_매크로_출처가_붙고_빈_끼니는_모름으로_남는다() {
+        helper.createDatabase(TEST_DB, 10).use { db ->
+            db.execSQL(
+                "INSERT INTO meal_entry (date, orderIndex, slotName, menuText, kcal, protein, eaten, memo) " +
+                    "VALUES ('2026-09-01', 0, '아침', '현미밥 + 계란', 520.0, 24.0, 1, '')"
+            )
+            db.execSQL(
+                "INSERT INTO meal_entry (date, orderIndex, slotName, menuText, eaten, memo) " +
+                    "VALUES ('2026-09-01', 1, '점심', '밖에서 사 먹음', 1, '')"
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, AppDatabase.VERSION, true, *AppDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT slotName, macroSource, kcal FROM meal_entry ORDER BY orderIndex").use { c ->
+                    assertTrue("끼니가 사라졌다", c.moveToFirst())
+                    assertEquals("아침", c.getString(0))
+                    assertEquals("값이 있던 끼니는 직접 입력으로 본다", "ENTERED", c.getString(1))
+                    assertEquals(520.0, c.getDouble(2), 0.001)
+
+                    assertTrue(c.moveToNext())
+                    assertEquals("매크로가 비어 있던 끼니는 모름이어야 한다", "NONE", c.getString(1))
+                }
+            }
+    }
+
     @Test
     fun 선언한_버전과_실제_DB_버전이_같다() {
         val db = helper.createDatabase(TEST_DB, AppDatabase.VERSION)

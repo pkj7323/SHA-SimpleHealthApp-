@@ -21,6 +21,24 @@ data class Macros(
     val isEmpty: Boolean get() = kcal == null && protein == null && carbs == null && fat == null && sugar == null
 }
 
+/**
+ * 이 끼니의 매크로가 **어디서 온 값인가.**
+ *
+ * 셋을 구분하지 않으면 [MacroEstimator]가 메뉴 이름만 보고 만든 어림값이 사용자가 직접
+ * 잰 값과 같은 무게로 취급된다. 합계에 섞이고, 나중에 AI가 읽으면 **추정치를 사실로
+ * 세탁한다.** 화면에서 "어림값 확정"을 누르는 순간 지금까지는 구분이 사라졌다.
+ */
+enum class MacroSource {
+    /** 매크로가 비어 있음 (모름) */
+    NONE,
+    /** 사용자가 직접 숫자를 넣음 */
+    ENTERED,
+    /** 음식 카탈로그에서 채움 — 일반적인 1인분 값이라 내 실제 양과 다를 수 있다 */
+    CATALOG,
+    /** 메뉴 이름으로 어림한 값을 확정한 것 — 셋 중 가장 약하다 */
+    ESTIMATED
+}
+
 /** 하루 한 끼니의 실제 기록. 끼니 이름은 고정이 아니라 자유롭게 추가·삭제된다. */
 @Entity(tableName = "meal_entry", indices = [Index(value = ["date"])])
 data class MealEntry(
@@ -31,7 +49,8 @@ data class MealEntry(
     val menuText: String,
     @androidx.room.Embedded val macros: Macros,
     val eaten: Boolean,
-    val memo: String = ""
+    val memo: String = "",
+    @ColumnInfo(defaultValue = "ENTERED") val macroSource: MacroSource = MacroSource.ENTERED
 )
 
 /** 저장해두고 불러오는 식단표(템플릿). 운동 루틴과 같은 개념. */

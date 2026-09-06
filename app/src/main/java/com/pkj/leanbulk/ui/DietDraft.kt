@@ -2,6 +2,7 @@ package com.pkj.leanbulk.ui
 
 import com.pkj.leanbulk.data.DietTemplateMeal
 import com.pkj.leanbulk.data.MacroEstimator
+import com.pkj.leanbulk.data.MacroSource
 import com.pkj.leanbulk.data.Macros
 import com.pkj.leanbulk.data.MealEntry
 
@@ -10,10 +11,25 @@ data class DraftMeal(
     val slotName: String,
     val menuText: String,
     val macros: Macros = Macros(),
-    val eaten: Boolean = false
+    val eaten: Boolean = false,
+    /** 이 매크로가 어디서 온 값인가. 비어 있으면 [MacroSource.NONE]. */
+    val macroSource: MacroSource = MacroSource.NONE
 ) {
     /** 매크로를 직접 넣지 않았을 때만 쓰는 참고용 어림값. 합계에는 섞지 않는다. */
     val estimate: Macros? get() = if (macros.isEmpty) MacroEstimator.estimate(menuText) else null
+}
+
+/**
+ * 사용자가 숫자를 직접 고칠 때 쓴다. **출처를 같이 바꿔야** 카탈로그에서 채운 값이나
+ * 확정한 어림값을 손으로 고쳤을 때 표시가 옛것으로 남지 않는다.
+ * 전부 지우면 다시 "모름"이 된다.
+ */
+fun DraftMeal.editMacros(transform: (Macros) -> Macros): DraftMeal {
+    val next = transform(macros)
+    return copy(
+        macros = next,
+        macroSource = if (next.isEmpty) MacroSource.NONE else MacroSource.ENTERED
+    )
 }
 
 /** 하루 합계. 직접 입력한 값만 더한 것과, 어림값까지 더한 것을 분리해서 들고 있다. */
@@ -60,11 +76,21 @@ fun List<DraftMeal>.totals(): DietTotals {
     )
 }
 
-fun DietTemplateMeal.toDraft(): DraftMeal =
-    DraftMeal(slotName = slotName, menuText = menuText, macros = macros)
+fun DietTemplateMeal.toDraft(): DraftMeal = DraftMeal(
+    slotName = slotName,
+    menuText = menuText,
+    macros = macros,
+    // 식단표는 출처를 담지 않는다. 계획 단계의 값이라 사용자가 넣은 것으로 본다.
+    macroSource = if (macros.isEmpty) MacroSource.NONE else MacroSource.ENTERED
+)
 
-fun MealEntry.toDraft(): DraftMeal =
-    DraftMeal(slotName = slotName, menuText = menuText, macros = macros, eaten = eaten)
+fun MealEntry.toDraft(): DraftMeal = DraftMeal(
+    slotName = slotName,
+    menuText = menuText,
+    macros = macros,
+    eaten = eaten,
+    macroSource = macroSource
+)
 
 fun List<DraftMeal>.toMealEntries(date: String): List<MealEntry> = mapIndexed { index, m ->
     MealEntry(
@@ -73,7 +99,8 @@ fun List<DraftMeal>.toMealEntries(date: String): List<MealEntry> = mapIndexed { 
         slotName = m.slotName,
         menuText = m.menuText,
         macros = m.macros,
-        eaten = m.eaten
+        eaten = m.eaten,
+        macroSource = m.macroSource
     )
 }
 

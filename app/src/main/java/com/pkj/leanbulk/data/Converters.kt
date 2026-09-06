@@ -30,6 +30,13 @@ class Converters {
         runCatching { GoalType.valueOf(value) }.getOrDefault(GoalType.MAINTAIN)
 
     @TypeConverter
+    fun macroSourceToString(value: MacroSource): String = value.name
+
+    @TypeConverter
+    fun stringToMacroSource(value: String): MacroSource =
+        runCatching { MacroSource.valueOf(value) }.getOrDefault(MacroSource.ENTERED)
+
+    @TypeConverter
     fun activityLevelToString(value: ActivityLevel): String = value.name
 
     @TypeConverter

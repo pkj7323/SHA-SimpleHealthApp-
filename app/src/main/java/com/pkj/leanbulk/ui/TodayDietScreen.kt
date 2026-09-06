@@ -50,6 +50,7 @@ import com.pkj.leanbulk.data.GoalType
 import com.pkj.leanbulk.data.TargetCalculator
 import com.pkj.leanbulk.data.DietTemplateWithMeals
 import com.pkj.leanbulk.data.FoodItem
+import com.pkj.leanbulk.data.MacroSource
 import com.pkj.leanbulk.data.Macros
 import java.time.LocalDate
 import kotlin.math.roundToInt
@@ -295,8 +296,14 @@ private fun MealCard(
                 modifier = Modifier.padding(top = 8.dp)
             ) { Text("음식 목록에서 고르기") }
 
+            // 저장된 뒤에도 이 숫자가 어디서 왔는지 보이게 한다. 직접 잰 값과 때려맞춘 값이
+            // 화면에서 같아 보이면, 사용자도 나중에 자기 기록을 못 믿는다.
             Text(
-                "영양정보 (모르면 비워두세요)",
+                when (meal.macroSource) {
+                    MacroSource.ESTIMATED -> "영양정보 ≈ 메뉴 이름으로 어림한 값"
+                    MacroSource.CATALOG -> "영양정보 · 음식 목록에서 가져온 값"
+                    else -> "영양정보 (모르면 비워두세요)"
+                },
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 8.dp)
             )
@@ -304,11 +311,11 @@ private fun MealCard(
                 Modifier.fillMaxWidth().horizontalScrollRow(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                NullableNumberField("칼로리", meal.macros.kcal) { v -> onChange { it.copy(macros = it.macros.copy(kcal = v)) } }
-                NullableNumberField("단백질", meal.macros.protein) { v -> onChange { it.copy(macros = it.macros.copy(protein = v)) } }
-                NullableNumberField("탄수", meal.macros.carbs) { v -> onChange { it.copy(macros = it.macros.copy(carbs = v)) } }
-                NullableNumberField("지방", meal.macros.fat) { v -> onChange { it.copy(macros = it.macros.copy(fat = v)) } }
-                NullableNumberField("당", meal.macros.sugar) { v -> onChange { it.copy(macros = it.macros.copy(sugar = v)) } }
+                NullableNumberField("칼로리", meal.macros.kcal) { v -> onChange { it.editMacros { m -> m.copy(kcal = v) } } }
+                NullableNumberField("단백질", meal.macros.protein) { v -> onChange { it.editMacros { m -> m.copy(protein = v) } } }
+                NullableNumberField("탄수", meal.macros.carbs) { v -> onChange { it.editMacros { m -> m.copy(carbs = v) } } }
+                NullableNumberField("지방", meal.macros.fat) { v -> onChange { it.editMacros { m -> m.copy(fat = v) } } }
+                NullableNumberField("당", meal.macros.sugar) { v -> onChange { it.editMacros { m -> m.copy(sugar = v) } } }
             }
 
             // 글자 하나 칠 때마다 추정 테이블을 다시 훑지 않도록 메뉴/매크로가 바뀔 때만 계산한다.

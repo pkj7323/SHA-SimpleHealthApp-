@@ -59,7 +59,14 @@ data class MealDto(
     val menuText: String,
     val macros: MacrosDto,
     val eaten: Boolean,
-    val memo: String
+    val memo: String,
+    /**
+     * 매크로의 출처(직접 입력 / 카탈로그 / 어림값 확정).
+     *
+     * 옛 백업엔 이 값이 없다. 그때는 셋을 구분하지 않고 저장했으므로 지금 와서 갈라낼 수
+     * 없고, 매크로가 있으면 `ENTERED`, 없으면 `NONE`으로 읽는다(마이그레이션 10→11과 같은 처리).
+     */
+    val macroSource: String? = null
 )
 
 /** 하루치 운동. 세트를 종목 안에 중첩해서 담는다. */

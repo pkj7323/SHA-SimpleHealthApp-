@@ -179,6 +179,27 @@ internal val MIGRATION_9_10 = Migration(9, 10) { db ->
     db.execSQL("DROP TABLE `routine_exercise_defaults`")
 }
 
+/**
+ * 10 → 11: 끼니 매크로의 **출처**를 남긴다.
+ *
+ * 지금까지 세 갈래(직접 입력 · 음식 카탈로그 · 어림값 확정)가 같은 값으로 저장돼서,
+ * 저장된 뒤에는 구분할 방법이 없었다. 특히 [MacroEstimator]의 어림값이 사용자가 잰
+ * 값과 섞이면 나중에 그 숫자를 근거로 답하는 쪽(AI 챗)이 추정치를 사실로 세탁한다.
+ *
+ * **기존 행은 전부 `ENTERED`가 된다** — 그 안에 확정된 어림값이 섞여 있어도 지금 와서는
+ * 갈라낼 수 없다. 매크로가 아예 비어 있던 행만 `NONE`으로 바로잡는다.
+ */
+internal val MIGRATION_10_11 = Migration(10, 11) { db ->
+    db.execSQL(
+        "ALTER TABLE `meal_entry` ADD COLUMN `macroSource` TEXT NOT NULL DEFAULT 'ENTERED'"
+    )
+    db.execSQL(
+        "UPDATE `meal_entry` SET `macroSource` = 'NONE' WHERE " +
+            "`kcal` IS NULL AND `protein` IS NULL AND `carbs` IS NULL AND " +
+            "`fat` IS NULL AND `sugar` IS NULL"
+    )
+}
+
 @Database(
     entities = [
         MealEntry::class,
@@ -195,7 +216,7 @@ internal val MIGRATION_9_10 = Migration(9, 10) { db ->
         AppMeta::class,
         Exercise::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -224,11 +245,12 @@ abstract class AppDatabase : RoomDatabase() {
          * 빠뜨리면 앱이 열리다 죽으므로 조용히 넘어가지 않는다.
          */
         internal val MIGRATIONS = arrayOf(
-            MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10
+            MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
+            MIGRATION_9_10, MIGRATION_10_11
         )
 
         /** 마이그레이션 테스트가 참조한다. `@Database`의 version과 항상 같아야 한다. */
-        internal const val VERSION = 10
+        internal const val VERSION = 11
 
         fun get(context: Context): AppDatabase =
             instance ?: synchronized(this) {

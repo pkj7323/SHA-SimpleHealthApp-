@@ -13,6 +13,7 @@ import com.pkj.leanbulk.data.Exercise
 import com.pkj.leanbulk.data.ItemSource
 import com.pkj.leanbulk.data.TrackingType
 import com.pkj.leanbulk.data.FoodItem
+import com.pkj.leanbulk.data.MacroSource
 import com.pkj.leanbulk.data.Macros
 import com.pkj.leanbulk.data.MealEntry
 import com.pkj.leanbulk.data.Repository
@@ -97,6 +98,28 @@ class SnapshotRoundTripTest {
         assertNull("입력하지 않은 단백질은 null로 남아야 한다", partial.protein)
     }
 
+    /**
+     * 매크로의 **출처**도 왕복에서 살아남아야 한다.
+     *
+     * 어림값이 `ENTERED`로 새어 나가면 다음에 그 숫자를 읽는 쪽(AI 챗)이 추정치를 사실로
+     * 세탁한다. 값이 맞는지만 보는 왕복 비교로는 안 잡히므로 따로 확인한다.
+     */
+    @Test
+    fun 매크로_출처가_왕복에서_유지된다() = runBlocking {
+        seedTrickyData()
+
+        repo.importSnapshot(SnapshotCodec.fromJson(SnapshotCodec.toJson(repo.exportSnapshot(fixedTime))))
+
+        val meals = repo.exportSnapshot(fixedTime).meals.associateBy { it.slotName }
+        assertEquals(
+            "어림값 확정이 직접 입력으로 둔갑했다",
+            MacroSource.ESTIMATED.name,
+            requireNotNull(meals["어림"]).macroSource
+        )
+        assertEquals(MacroSource.NONE.name, requireNotNull(meals["모름"]).macroSource)
+        assertEquals(MacroSource.ENTERED.name, requireNotNull(meals["진짜0"]).macroSource)
+    }
+
     @Test
     fun gzip_왕복도_같은_결과를_준다() = runBlocking {
         seedTrickyData()
@@ -163,7 +186,14 @@ class SnapshotRoundTripTest {
                 // 매크로를 아예 모르는 끼니
                 MealEntry(
                     date = "2026-08-30", orderIndex = 0, slotName = "모름",
-                    menuText = "밖에서 사 먹은 국밥", macros = Macros(), eaten = true, memo = ""
+                    menuText = "밖에서 사 먹은 국밥", macros = Macros(), eaten = true, memo = "",
+                    macroSource = MacroSource.NONE
+                ),
+                // 어림값을 확정한 끼니 — 직접 잰 값과 섞이면 안 되므로 출처가 살아남아야 한다
+                MealEntry(
+                    date = "2026-08-30", orderIndex = 2, slotName = "어림",
+                    menuText = "김밥 한 줄", macros = Macros(kcal = 480.0, protein = 12.0),
+                    eaten = true, memo = "", macroSource = MacroSource.ESTIMATED
                 ),
                 // 진짜로 0인 끼니 (물만 마심 등)
                 MealEntry(

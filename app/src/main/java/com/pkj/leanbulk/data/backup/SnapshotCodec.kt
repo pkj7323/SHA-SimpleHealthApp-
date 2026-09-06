@@ -11,6 +11,7 @@ import com.pkj.leanbulk.data.ExerciseWithSets
 import com.pkj.leanbulk.data.FoodItem
 import com.pkj.leanbulk.data.ItemSource
 import com.pkj.leanbulk.data.TrackingType
+import com.pkj.leanbulk.data.MacroSource
 import com.pkj.leanbulk.data.Macros
 import com.pkj.leanbulk.data.MealEntry
 import com.pkj.leanbulk.data.RoutineExercise
@@ -63,7 +64,8 @@ object SnapshotCodec {
         menuText = menuText,
         macros = macros.toDto(),
         eaten = eaten,
-        memo = memo
+        memo = memo,
+        macroSource = macroSource.name
     )
 
     fun Exercise.toDto() = ExerciseDto(
@@ -163,15 +165,22 @@ object SnapshotCodec {
 
     fun MacrosDto.toEntity() = Macros(kcal, protein, carbs, fat, sugar)
 
-    fun MealDto.toEntity() = MealEntry(
-        date = date,
-        orderIndex = orderIndex,
-        slotName = slotName,
-        menuText = menuText,
-        macros = macros.toEntity(),
-        eaten = eaten,
-        memo = memo
-    )
+    fun MealDto.toEntity(): MealEntry {
+        val restored = macros.toEntity()
+        return MealEntry(
+            date = date,
+            orderIndex = orderIndex,
+            slotName = slotName,
+            menuText = menuText,
+            macros = restored,
+            eaten = eaten,
+            memo = memo,
+            // 옛 백업엔 출처가 없다. 있으면 값이 있는 것으로, 없으면 모름으로 읽는다.
+            macroSource = macroSource?.let {
+                runCatching { MacroSource.valueOf(it) }.getOrNull()
+            } ?: if (restored.isEmpty) MacroSource.NONE else MacroSource.ENTERED
+        )
+    }
 
     /** 모르는 값이 와도 죽지 않게 기본값으로 떨어뜨린다(구버전이 신버전 파일을 읽는 경우). */
     private fun trackingTypeOf(name: String): TrackingType =

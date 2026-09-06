@@ -8,6 +8,7 @@ import com.pkj.leanbulk.data.DietTemplateWithMeals
 import com.pkj.leanbulk.data.Exercise
 import com.pkj.leanbulk.data.ExerciseWithSets
 import com.pkj.leanbulk.data.FoodItem
+import com.pkj.leanbulk.data.MacroSource
 import com.pkj.leanbulk.data.Macros
 import com.pkj.leanbulk.data.MealEntry
 import com.pkj.leanbulk.data.Repository
@@ -438,14 +439,28 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
         scheduleDietSave()
     }
 
-    /** 음식 카탈로그에서 고른 값을 해당 끼니에 채워 넣는다. */
+    /**
+     * 음식 카탈로그에서 고른 값을 해당 끼니에 채워 넣는다.
+     * 카탈로그 값은 **일반적인 1인분**이라 내가 먹은 양과 다를 수 있으므로 출처를 남긴다.
+     */
     fun applyFood(index: Int, food: FoodItem) {
-        updateMeal(index) { it.copy(menuText = food.name, macros = food.macros) }
+        updateMeal(index) {
+            it.copy(
+                menuText = food.name,
+                macros = food.macros,
+                macroSource = if (food.macros.isEmpty) MacroSource.NONE else MacroSource.CATALOG
+            )
+        }
     }
 
-    /** 어림값을 실제 입력값으로 확정한다. */
+    /**
+     * 어림값을 실제 값으로 확정한다.
+     * **어디까지나 메뉴 이름으로 때려맞춘 값**이므로 출처를 남겨서 직접 잰 값과 섞이지 않게 한다.
+     */
     fun acceptEstimate(index: Int) {
-        updateMeal(index) { meal -> meal.estimate?.let { meal.copy(macros = it) } ?: meal }
+        updateMeal(index) { meal ->
+            meal.estimate?.let { meal.copy(macros = it, macroSource = MacroSource.ESTIMATED) } ?: meal
+        }
     }
 
     /** 목록에서 치운다. 시드 음식은 지우면 다음 갱신 때 되살아나므로 숨김으로 처리한다. */
