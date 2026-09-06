@@ -157,6 +157,14 @@ fun List<DraftMeal>.totals(): DietTotals {
     )
 }
 
+/**
+ * 아직 아무것도 안 적은 끼니뿐인지. 기본으로 채워둔 아침/점심/저녁/간식(§9.1)은 그 자체로는
+ * "내용"이 아니므로, 식단표를 불러올 때 갈아엎기 확인을 띄울지 판단하는 데 쓴다 —
+ * `isEmpty()`만 보면 이 기본 4칸 때문에 매번 확인 창이 뜬다.
+ */
+fun List<DraftMeal>.hasContent(): Boolean =
+    any { it.menuText.isNotBlank() || !it.macros.isEmpty || it.foods.isNotEmpty() }
+
 fun DietTemplateMeal.toDraft(): DraftMeal = DraftMeal(
     slotName = slotName,
     menuText = menuText,

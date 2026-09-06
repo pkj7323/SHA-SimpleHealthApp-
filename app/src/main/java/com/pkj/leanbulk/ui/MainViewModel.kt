@@ -41,6 +41,9 @@ private val TIME_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 /** 편집이 멈춘 뒤 이만큼 지나면 저장한다. */
 private const val SAVE_DELAY_MS = 700L
 
+/** 기록이 없는 날짜를 열면 기본으로 띄우는 끼니 4개(DIET-REDESIGN.md §9.1). */
+private val DEFAULT_MEAL_SLOT_NAMES = listOf("아침", "점심", "저녁", "간식")
+
 class MainViewModel(private val repository: Repository) : ViewModel() {
 
     /** 자정을 넘기거나 앱이 다시 앞으로 나올 때마다 갱신되는 "오늘". */
@@ -383,10 +386,19 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
         }
     }
 
+    /**
+     * 저장된 게 없는 날짜를 열면 아침·점심·저녁·간식 4칸을 기본으로 채워둔다(DIET-REDESIGN.md §9.1,
+     * 인아웃 참고). 아무것도 안 건드리면 [scheduleDietSave]가 안 불려서 DB에는 안 남는다 —
+     * 그냥 열어만 봐도 빈 끼니 4개가 생기면 안 되기 때문이다. 5번째부터는 기존 "끼니 추가"로 만든다.
+     */
     private fun loadDietDraft(date: String) {
         viewModelScope.launch {
             val saved = repository.observeMealsWithFoods(date).first()
-            _dietDraft.value = saved.sortedBy { it.entry.orderIndex }.map { it.toDraft() }
+            _dietDraft.value = if (saved.isEmpty()) {
+                DEFAULT_MEAL_SLOT_NAMES.map { DraftMeal(slotName = it, menuText = "") }
+            } else {
+                saved.sortedBy { it.entry.orderIndex }.map { it.toDraft() }
+            }
             if (saved.isEmpty()) _dietTemplateName.value = ""
         }
     }
@@ -413,7 +425,7 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
 
     /** 지금 화면의 끼니 구성을 식단표로 저장한다. */
     fun saveCurrentAsTemplate(name: String) {
-        if (name.isBlank() || _dietDraft.value.isEmpty()) return
+        if (name.isBlank() || !_dietDraft.value.hasContent()) return
         viewModelScope.launch {
             repository.saveAsNewDietTemplate(name.trim(), _dietDraft.value.toTemplateMeals())
             _dietTemplateName.value = name.trim()

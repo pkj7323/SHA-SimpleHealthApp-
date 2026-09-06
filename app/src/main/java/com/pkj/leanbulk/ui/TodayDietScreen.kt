@@ -164,14 +164,14 @@ fun TodayDietScreen(vm: MainViewModel) {
             templates = templates,
             // 이미 짜둔 끼니가 있으면 통째로 갈아엎는 것이므로 한 번 확인한다.
             onPick = {
-                if (draft.isEmpty()) vm.loadDietTemplate(it) else pendingTemplate = it
+                if (!draft.hasContent()) vm.loadDietTemplate(it) else pendingTemplate = it
                 showTemplatePicker = false
             },
             onAdd = vm::addDietTemplate,
             onRename = vm::renameDietTemplate,
             onDelete = vm::deleteDietTemplate,
             onOverwrite = { vm.overwriteTemplate(it.template.id, it.template.name) },
-            canOverwrite = draft.isNotEmpty(),
+            canOverwrite = draft.hasContent(),
             onDismiss = { showTemplatePicker = false }
         )
     }
