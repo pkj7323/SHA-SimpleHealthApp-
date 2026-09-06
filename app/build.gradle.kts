@@ -109,6 +109,15 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.room:room-testing:2.8.4")
+
+    // 컴포저블을 직접 렌더링해 조작·검증하는 테스트용. 화면 하나 바꿀 때마다 에뮬레이터로
+    // 스크린샷을 찍어 눈으로 확인하는 대신, 여기서 자동으로 반복 검증한다.
+    androidTestImplementation(platform("androidx.compose:compose-bom:2026.08.00"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    // ui-test-junit4가 딸려오는 espresso-core 3.5.0은 API 37(에뮬레이터)의 InputManager와
+    // 안 맞아 클릭·입력이 전부 NoSuchMethodException으로 죽는다. 명시로 버전을 올려 덮어쓴다.
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
 }
 
 /**
