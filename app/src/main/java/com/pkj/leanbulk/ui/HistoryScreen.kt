@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.pkj.leanbulk.data.ExerciseWithSets
 import com.pkj.leanbulk.data.MealEntry
+import com.pkj.leanbulk.data.hasContent
 import kotlin.math.roundToInt
 
 @Composable
@@ -77,18 +78,18 @@ private fun DayCard(date: String, dayMeals: List<MealEntry>, dayWorkouts: List<E
             ) {
                 Text(date, fontWeight = FontWeight.Bold)
 
-                // 체크 안 한 끼니도 기록으로 남아 있으므로 같이 보여준다.
-                if (dayMeals.isNotEmpty()) {
-                    val eaten = dayMeals.filter { it.eaten }
-                    val kcal = eaten.sumOf { it.macros.kcal ?: 0.0 }.roundToInt()
-                    val protein = eaten.sumOf { it.macros.protein ?: 0.0 }.roundToInt()
-                    Text("식단: ${kcal}kcal · 단백질 ${protein}g (${eaten.size}/${dayMeals.size}끼 섭취)")
+                // 빈 칸(아무것도 안 담은 끼니)은 세지 않는다 — 고정 네 칸이라 늘 같이 저장된다.
+                val filled = dayMeals.filter { it.hasContent }
+                if (filled.isNotEmpty()) {
+                    val kcal = filled.sumOf { it.macros.kcal ?: 0.0 }.roundToInt()
+                    val protein = filled.sumOf { it.macros.protein ?: 0.0 }.roundToInt()
+                    Text("식단: ${kcal}kcal · 단백질 ${protein}g (${filled.size}끼니)")
                 }
                 if (dayWorkouts.isNotEmpty()) {
                     val routine = dayWorkouts.first().exercise.routineName.ifBlank { "운동" }
                     Text("$routine · 총 볼륨 ${dayWorkouts.sumOf { it.volume }.roundToInt()}kg (${dayWorkouts.size}종목)")
                 }
-                if (dayMeals.isEmpty() && dayWorkouts.isEmpty()) {
+                if (filled.isEmpty() && dayWorkouts.isEmpty()) {
                     Text("기록 없음")
                 }
 
@@ -149,14 +150,14 @@ private fun buildDayDetail(
         appendLine("총 볼륨 ${workouts.sumOf { it.volume }.roundToInt()}kg")
     }
 
-    if (meals.isNotEmpty()) {
+    val filled = meals.filter { it.hasContent }
+    if (filled.isNotEmpty()) {
         appendLine()
-        appendLine("■ 식단   (✓ 섭취 / · 미섭취)")
-        meals.sortedBy { it.orderIndex }.forEach { m ->
+        appendLine("■ 식단")
+        filled.sortedBy { it.orderIndex }.forEach { m ->
             appendLine()
-            val mark = if (m.eaten) "✓" else "·"
             val kcalText = m.macros.kcal?.let { "${it.roundToInt()}kcal" } ?: "영양정보 없음"
-            appendLine("$mark ${m.slotName}  $kcalText")
+            appendLine("· ${m.slotName}  $kcalText")
             if (m.menuText.isNotBlank()) appendLine("   ${m.menuText}")
             if (!m.macros.isEmpty) {
                 appendLine(
@@ -166,18 +167,17 @@ private fun buildDayDetail(
             }
         }
 
-        val eaten = meals.filter { it.eaten }
         appendLine()
         appendLine(
-            "합계(섭취분) ${eaten.sumOf { it.macros.kcal ?: 0.0 }.roundToInt()}kcal · " +
-                "단백질 ${eaten.sumOf { it.macros.protein ?: 0.0 }.roundToInt()}g · " +
-                "탄수 ${eaten.sumOf { it.macros.carbs ?: 0.0 }.roundToInt()}g · " +
-                "지방 ${eaten.sumOf { it.macros.fat ?: 0.0 }.roundToInt()}g · " +
-                "당 ${eaten.sumOf { it.macros.sugar ?: 0.0 }.roundToInt()}g"
+            "합계 ${filled.sumOf { it.macros.kcal ?: 0.0 }.roundToInt()}kcal · " +
+                "단백질 ${filled.sumOf { it.macros.protein ?: 0.0 }.roundToInt()}g · " +
+                "탄수 ${filled.sumOf { it.macros.carbs ?: 0.0 }.roundToInt()}g · " +
+                "지방 ${filled.sumOf { it.macros.fat ?: 0.0 }.roundToInt()}g · " +
+                "당 ${filled.sumOf { it.macros.sugar ?: 0.0 }.roundToInt()}g"
         )
 
-        val unknown = eaten.count { it.macros.isEmpty }
-        if (unknown > 0) appendLine("(영양정보 미입력 ${unknown}끼니는 합계에서 빠짐)")
+        val unknown = filled.count { it.macros.isEmpty }
+        if (unknown > 0) appendLine("(영양정보를 모르는 ${unknown}끼니는 합계에서 빠짐)")
     }
 }
 

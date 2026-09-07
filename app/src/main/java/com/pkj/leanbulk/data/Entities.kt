@@ -62,6 +62,10 @@ data class MealEntry(
     val slotName: String, // 아침 / 점심 / 간식 ... 사용자가 자유롭게 지정
     val menuText: String,
     @androidx.room.Embedded val macros: Macros,
+    /**
+     * 예전에 있던 "먹었다" 체크. 끼니 칸이 고정되면서 화면에서 없앴고 새 기록은 늘 `true`다
+     * (담았으면 먹은 것). 옛 기록에는 `false`가 남아 있을 수 있어 컬럼은 그대로 둔다.
+     */
     val eaten: Boolean,
     val memo: String = "",
     @ColumnInfo(defaultValue = "ENTERED") val macroSource: MacroSource = MacroSource.ENTERED
@@ -191,6 +195,14 @@ data class MealFood(
     @androidx.room.Embedded val macros: Macros,
     @ColumnInfo(defaultValue = "CATALOG") val macroSource: MacroSource = MacroSource.CATALOG
 )
+
+/**
+ * 뭔가 담긴 끼니인지. 끼니 칸이 아침·점심·저녁·간식으로 고정되면서 **빈 칸도 같이 저장되므로**
+ * (한 끼니를 고치면 그날 네 칸이 통째로 저장된다) 화면·내보내기가 이걸로 걸러야 한다.
+ * 안 그러면 아무것도 안 먹은 칸이 "0kcal 끼니"로 세어진다.
+ */
+val MealEntry.hasContent: Boolean
+    get() = menuText.isNotBlank() || !macros.isEmpty
 
 /** 끼니 + 그 안의 음식 줄들. */
 data class MealEntryWithFoods(

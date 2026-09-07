@@ -7,6 +7,7 @@ import com.pkj.leanbulk.data.Exercise
 import com.pkj.leanbulk.data.ExerciseWithSets
 import com.pkj.leanbulk.data.TrackingType
 import com.pkj.leanbulk.data.MealEntry
+import com.pkj.leanbulk.data.hasContent
 import com.pkj.leanbulk.data.RoutineWithExercises
 import com.pkj.leanbulk.data.SeedData
 import com.pkj.leanbulk.data.WorkoutSet
@@ -246,12 +247,13 @@ object XlsxExporter {
         val byDate = meals.groupBy { it.date }.toSortedMap()
         byDate.entries.forEachIndexed { i, (date, dayMeals) ->
             val row = 3 + i
-            val eaten = dayMeals.filter { it.eaten }
-            val kcal = eaten.sumOf { it.macros.kcal ?: 0.0 }
-            val protein = eaten.sumOf { it.macros.protein ?: 0.0 }
-            val carbs = eaten.sumOf { it.macros.carbs ?: 0.0 }
-            val fat = eaten.sumOf { it.macros.fat ?: 0.0 }
-            val sugar = eaten.sumOf { it.macros.sugar ?: 0.0 }
+            // 빈 칸(아무것도 안 담은 끼니)은 빼고 센다 — 고정 네 칸이라 늘 같이 저장된다.
+            val filled = dayMeals.filter { it.hasContent }
+            val kcal = filled.sumOf { it.macros.kcal ?: 0.0 }
+            val protein = filled.sumOf { it.macros.protein ?: 0.0 }
+            val carbs = filled.sumOf { it.macros.carbs ?: 0.0 }
+            val fat = filled.sumOf { it.macros.fat ?: 0.0 }
+            val sugar = filled.sumOf { it.macros.sugar ?: 0.0 }
             val achieved = kotlin.math.abs(kcal - goalKcal) <= 150 && protein >= goalProtein - 10
 
             ws.value(row, 0, date)
@@ -262,10 +264,8 @@ object XlsxExporter {
             ws.value(row, 5, if (achieved) "O" else "X")
 
             val notes = buildList {
-                val skipped = dayMeals.filter { !it.eaten }.joinToString(", ") { it.slotName }
-                if (skipped.isNotBlank()) add("미섭취: $skipped")
-                val unknown = eaten.count { it.macros.isEmpty }
-                if (unknown > 0) add("영양정보 미입력 ${unknown}끼니")
+                val unknown = filled.count { it.macros.isEmpty }
+                if (unknown > 0) add("영양정보를 모르는 ${unknown}끼니")
             }
             if (notes.isNotEmpty()) ws.value(row, 6, notes.joinToString(" / "))
             ws.value(row, 7, sugar)
@@ -279,23 +279,24 @@ object XlsxExporter {
     private fun writeDietDetailSheet(wb: Workbook, meals: List<MealEntry>) {
         val ws = wb.newWorksheet("식단상세")
         ws.value(0, 0, "끼니별 식단 기록")
-        ws.value(1, 0, "섭취 여부까지 그대로 남긴다. 영양정보를 모르는 끼니는 빈 칸으로 둔다.")
-        val headers = listOf("날짜", "끼니", "메뉴", "섭취", "칼로리", "단백질(g)", "탄수(g)", "지방(g)", "당(g)")
+        ws.value(1, 0, "아무것도 안 담은 끼니는 넣지 않는다. 영양정보를 모르는 끼니는 빈 칸으로 둔다.")
+        val headers = listOf("날짜", "끼니", "메뉴", "칼로리", "단백질(g)", "탄수(g)", "지방(g)", "당(g)")
         headers.forEachIndexed { c, h -> ws.value(2, c, h) }
 
         var row = 3
-        meals.sortedWith(compareBy({ it.date }, { it.orderIndex })).forEach { m ->
-            ws.value(row, 0, m.date)
-            ws.value(row, 1, m.slotName)
-            if (m.menuText.isNotBlank()) ws.value(row, 2, m.menuText)
-            ws.value(row, 3, if (m.eaten) "O" else "X")
-            m.macros.kcal?.let { ws.value(row, 4, it) }
-            m.macros.protein?.let { ws.value(row, 5, it) }
-            m.macros.carbs?.let { ws.value(row, 6, it) }
-            m.macros.fat?.let { ws.value(row, 7, it) }
-            m.macros.sugar?.let { ws.value(row, 8, it) }
-            row++
-        }
+        meals.filter { it.hasContent }
+            .sortedWith(compareBy({ it.date }, { it.orderIndex }))
+            .forEach { m ->
+                ws.value(row, 0, m.date)
+                ws.value(row, 1, m.slotName)
+                if (m.menuText.isNotBlank()) ws.value(row, 2, m.menuText)
+                m.macros.kcal?.let { ws.value(row, 3, it) }
+                m.macros.protein?.let { ws.value(row, 4, it) }
+                m.macros.carbs?.let { ws.value(row, 5, it) }
+                m.macros.fat?.let { ws.value(row, 6, it) }
+                m.macros.sugar?.let { ws.value(row, 7, it) }
+                row++
+            }
     }
 
     private fun writeHowToSheet(wb: Workbook) {
