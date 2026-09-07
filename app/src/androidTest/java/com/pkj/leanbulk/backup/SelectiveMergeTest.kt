@@ -5,6 +5,9 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pkj.leanbulk.data.AppDatabase
+import com.pkj.leanbulk.data.Macros
+import com.pkj.leanbulk.data.FoodItem
+import com.pkj.leanbulk.data.AmountUnit
 import com.pkj.leanbulk.data.ItemSource
 import com.pkj.leanbulk.data.Repository
 import com.pkj.leanbulk.data.TrackingType
@@ -170,6 +173,56 @@ class SelectiveMergeTest {
         val templates = db.dietTemplateDao().getAll()
         assertEquals(before + 1, templates.size)
         assertEquals(1, templates.first { it.template.name == "남의 식단표" }.meals.size)
+    }
+
+    /**
+     * 직접 등록한 음식만 뽑아 두었다가 다른 기기/사람이 담는 경로(ROADMAP 3번 "시드 승격").
+     *
+     * **이미 있는 slug는 건너뛴다** — 남의 파일이 내가 고쳐둔 영양정보를 덮어쓰면 안 된다.
+     * 이름만 겹치는 건 뒤에 번호를 붙여 둘 다 남긴다(`food_item.name`이 유니크라 그냥 넣으면
+     * 조용히 무시된다).
+     */
+    @Test
+    fun 내_음식만_뽑아_다시_담을_수_있다() = runBlocking {
+        repo.applySeeds()
+        db.foodDao().insert(
+            FoodItem(
+                slug = "user-내가-만든-음식", name = "내가 만든 음식", category = "간편식",
+                macros = Macros(kcal = 300.0), source = ItemSource.USER,
+                baseAmount = 500.0, baseAmountUnit = AmountUnit.ML
+            )
+        )
+        // 숨긴 것과 시드는 내보내지 않는다 — 다음 버전 시드에 넣을 후보가 아니다.
+        db.foodDao().insert(
+            FoodItem(
+                slug = "user-치운-음식", name = "치운 음식", macros = Macros(kcal = 10.0),
+                source = ItemSource.USER, hidden = true
+            )
+        )
+
+        val exported = repo.exportUserFoods("2026-09-07T00:00:00")
+
+        assertEquals("직접 등록한 것만 나가야 한다", 1, exported.foods.size)
+        assertEquals("내가 만든 음식", exported.foods.single().name)
+        assertEquals("ML", exported.foods.single().baseAmountUnit)
+
+        // 받는 쪽: 아직 없는 음식이라 그대로 들어온다.
+        val fresh = Repository(
+            Room.inMemoryDatabaseBuilder(
+                ApplicationProvider.getApplicationContext(), AppDatabase::class.java
+            ).build()
+        )
+        val result = fresh.mergeFromSnapshot(
+            catalog = emptyList(), routines = emptyList(), dietTemplates = emptyList(),
+            exercises = emptyList(), foods = exported.foods
+        )
+        assertEquals(1, result.foods)
+
+        // 같은 파일을 또 담아도 늘지 않는다(slug가 같으므로).
+        assertEquals(0, fresh.mergeFromSnapshot(
+            catalog = emptyList(), routines = emptyList(), dietTemplates = emptyList(),
+            exercises = emptyList(), foods = exported.foods
+        ).foods)
     }
 
     /** 루틴 없이 종목만 골라 가져오는 경우. 남이 만든 종목을 내 카탈로그에 담는다. */

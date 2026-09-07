@@ -2,6 +2,7 @@ package com.pkj.leanbulk.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pkj.leanbulk.data.AmountUnit
 import com.pkj.leanbulk.data.BodyRecord
 import com.pkj.leanbulk.data.DietTarget
 import com.pkj.leanbulk.data.Exercise
@@ -18,6 +19,7 @@ import com.pkj.leanbulk.data.SeedData
 import com.pkj.leanbulk.data.TrackingType
 import com.pkj.leanbulk.data.backup.DietTemplateDto
 import com.pkj.leanbulk.data.backup.ExerciseDto
+import com.pkj.leanbulk.data.backup.FoodDto
 import com.pkj.leanbulk.data.backup.RoutineDto
 import com.pkj.leanbulk.data.backup.Snapshot
 import kotlinx.coroutines.Job
@@ -407,6 +409,15 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
         scheduleDietSave()
     }
 
+    /** 직접 등록한 음식을 고친다. 이름이 겹치면 안내만 하고 아무것도 바꾸지 않는다. */
+    fun updateFood(food: FoodItem) {
+        viewModelScope.launch {
+            if (!repository.updateFood(food)) {
+                _toast.value = "'${food.name.trim()}' 이름의 음식이 이미 있습니다"
+            }
+        }
+    }
+
     /** 목록에서 치운다. 시드 음식은 지우면 다음 갱신 때 되살아나므로 숨김으로 처리한다. */
     fun hideFood(id: Long) {
         viewModelScope.launch { repository.hideFood(id) }
@@ -437,8 +448,13 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
     }
 
     /** "직접 등록"으로 카탈로그에 새 음식을 만든다. 만든 음식은 곧바로 수량을 정해 담을 수 있게 돌려준다. */
-    suspend fun addNewFood(name: String, category: String, macros: Macros, baseAmountGram: Double?): FoodItem =
-        repository.addUserFood(name, category, macros, baseAmountGram)
+    suspend fun addNewFood(
+        name: String,
+        category: String,
+        macros: Macros,
+        baseAmount: Double?,
+        baseAmountUnit: AmountUnit
+    ): FoodItem = repository.addUserFood(name, category, macros, baseAmount, baseAmountUnit)
 
     /**
      * "내 식사"(식사세트)를 끼니에 통째로 담는다.
@@ -458,7 +474,8 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
                     foodId = null,
                     name = f.name,
                     multiplier = f.multiplier,
-                    amountGram = f.amountGram,
+                    amount = f.amount,
+                    amountUnit = f.amountUnit,
                     macros = f.macros,
                     macroSource = f.macroSource
                 )
@@ -482,7 +499,8 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
                         foodId = f.foodId,
                         name = f.name,
                         multiplier = f.multiplier,
-                        amountGram = f.amountGram,
+                        amount = f.amount,
+                        amountUnit = f.amountUnit,
                         macros = f.macros,
                         macroSource = f.macroSource
                     )
@@ -597,8 +615,14 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
         catalog: List<ExerciseDto>,
         routines: List<RoutineDto>,
         dietTemplates: List<DietTemplateDto>,
-        exercises: List<ExerciseDto>
-    ): Repository.MergeResult = repository.mergeFromSnapshot(catalog, routines, dietTemplates, exercises)
+        exercises: List<ExerciseDto>,
+        foods: List<FoodDto>
+    ): Repository.MergeResult =
+        repository.mergeFromSnapshot(catalog, routines, dietTemplates, exercises, foods)
+
+    /** 직접 등록한 음식만 담은 스냅샷. 다음 버전 시드에 넣을 후보를 뽑아내는 용도다. */
+    suspend fun buildUserFoodSnapshot(): Snapshot =
+        repository.exportUserFoods(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
 
     suspend fun applyImport(snapshot: Snapshot, saveRollbackPoint: suspend (Snapshot) -> Unit) {
         workoutSaveJob?.cancel()

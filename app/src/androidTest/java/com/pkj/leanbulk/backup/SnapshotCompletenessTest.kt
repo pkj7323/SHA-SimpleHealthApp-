@@ -42,7 +42,7 @@ class SnapshotCompletenessTest {
         assertFields<MealEntry>("id", "date", "orderIndex", "slotName", "menuText", "macros", "eaten", "memo",
             "macroSource")
         assertFields<MealFood>(
-            "id", "mealEntryId", "orderIndex", "foodId", "name", "multiplier", "amountGram",
+            "id", "mealEntryId", "orderIndex", "foodId", "name", "multiplier", "amount", "amountUnit",
             "macros", "macroSource"
         )
 
@@ -68,11 +68,11 @@ class SnapshotCompletenessTest {
 
         assertFields<FoodItem>(
             "id", "slug", "name", "category", "macros", "usedCount", "source", "hidden",
-            "favorite", "baseAmountGram"
+            "favorite", "baseAmount", "baseAmountUnit"
         )
         assertFields<MealPreset>("id", "name", "orderIndex")
         assertFields<MealPresetFood>(
-            "id", "presetId", "orderIndex", "foodId", "name", "multiplier", "amountGram",
+            "id", "presetId", "orderIndex", "foodId", "name", "multiplier", "amount", "amountUnit",
             "macros", "macroSource"
         )
         assertFields<AppMeta>("id", "seedVersion")

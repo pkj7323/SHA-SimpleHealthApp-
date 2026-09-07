@@ -1,5 +1,6 @@
 package com.pkj.leanbulk.data.backup
 
+import com.pkj.leanbulk.data.AmountUnit
 import com.pkj.leanbulk.data.BodyRecord
 import com.pkj.leanbulk.data.ActivityLevel
 import com.pkj.leanbulk.data.DietTarget
@@ -81,7 +82,8 @@ object SnapshotCodec {
                 foodSlug = f.foodId?.let { foodSlugById[it] },
                 name = f.name,
                 multiplier = f.multiplier,
-                amountGram = f.amountGram,
+                amountGram = f.amount,
+                amountUnit = f.amountUnit.name,
                 macros = f.macros.toDto(),
                 macroSource = f.macroSource.name
             )
@@ -165,7 +167,8 @@ object SnapshotCodec {
         usedCount = usedCount,
         source = source.name,
         hidden = hidden,
-        baseAmountGram = baseAmountGram,
+        baseAmountGram = baseAmount,
+        baseAmountUnit = baseAmountUnit.name,
         favorite = favorite
     )
 
@@ -179,7 +182,8 @@ object SnapshotCodec {
                 foodSlug = f.foodId?.let { foodSlugById[it] },
                 name = f.name,
                 multiplier = f.multiplier,
-                amountGram = f.amountGram,
+                amountGram = f.amount,
+                amountUnit = f.amountUnit.name,
                 macros = f.macros.toDto(),
                 macroSource = f.macroSource.name
             )
@@ -231,13 +235,17 @@ object SnapshotCodec {
                 foodId = f.foodSlug?.let { idBySlug[it] },
                 name = f.name,
                 multiplier = f.multiplier,
-                amountGram = f.amountGram,
+                amount = f.amountGram,
+                amountUnit = amountUnitOf(f.amountUnit),
                 macros = f.macros.toEntity(),
                 macroSource = runCatching { MacroSource.valueOf(f.macroSource) }.getOrDefault(MacroSource.CATALOG)
             )
         }
         return entity to restoredFoods
     }
+
+    private fun amountUnitOf(name: String): AmountUnit =
+        runCatching { AmountUnit.valueOf(name) }.getOrDefault(AmountUnit.G)
 
     /** 모르는 값이 와도 죽지 않게 기본값으로 떨어뜨린다(구버전이 신버전 파일을 읽는 경우). */
     private fun trackingTypeOf(name: String): TrackingType =
@@ -340,7 +348,8 @@ object SnapshotCodec {
         usedCount = usedCount,
         source = runCatching { ItemSource.valueOf(source) }.getOrDefault(ItemSource.USER),
         hidden = hidden,
-        baseAmountGram = baseAmountGram,
+        baseAmount = baseAmountGram,
+        baseAmountUnit = amountUnitOf(baseAmountUnit),
         favorite = favorite
     )
 
@@ -354,7 +363,8 @@ object SnapshotCodec {
                 foodId = f.foodSlug?.let { idBySlug[it] },
                 name = f.name,
                 multiplier = f.multiplier,
-                amountGram = f.amountGram,
+                amount = f.amountGram,
+                amountUnit = amountUnitOf(f.amountUnit),
                 macros = f.macros.toEntity(),
                 macroSource = runCatching { MacroSource.valueOf(f.macroSource) }.getOrDefault(MacroSource.CATALOG)
             )

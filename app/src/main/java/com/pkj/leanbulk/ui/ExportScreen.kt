@@ -44,6 +44,7 @@ import com.pkj.leanbulk.data.MealEntry
 import com.pkj.leanbulk.data.backup.BackupFiles
 import com.pkj.leanbulk.data.backup.DietTemplateDto
 import com.pkj.leanbulk.data.backup.ExerciseDto
+import com.pkj.leanbulk.data.backup.FoodDto
 import com.pkj.leanbulk.data.backup.RoutineDto
 import com.pkj.leanbulk.data.backup.Snapshot
 import com.pkj.leanbulk.export.ShareUtils
@@ -155,6 +156,12 @@ fun ExportScreen(vm: MainViewModel) {
         Spacer(Modifier.height(24.dp))
 
         BackupSection(vm)
+
+        Spacer(Modifier.height(24.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(24.dp))
+
+        UserFoodExportSection(vm)
     }
 }
 
@@ -299,16 +306,17 @@ private fun BackupSection(vm: MainViewModel) {
     mergeFrom?.let { snapshot ->
         SelectiveMergeDialog(
             snapshot = snapshot,
-            onMerge = { routines, templates, exercises ->
+            onMerge = { routines, templates, exercises, foods ->
                 mergeFrom = null
                 scope.launch {
                     working = true
                     status = runCatching {
-                        vm.mergeFromSnapshot(snapshot.exercises, routines, templates, exercises)
+                        vm.mergeFromSnapshot(snapshot.exercises, routines, templates, exercises, foods)
                     }.fold(
                         onSuccess = { r ->
                             "가져왔습니다 — 루틴 ${r.routines} · 식단표 ${r.dietTemplates}" +
-                                if (r.exercises > 0) " · 종목 ${r.exercises}" else ""
+                                (if (r.exercises > 0) " · 종목 ${r.exercises}" else "") +
+                                (if (r.foods > 0) " · 음식 ${r.foods}" else "")
                         },
                         onFailure = { "가져오기 실패: ${it.message}" }
                     )
@@ -321,6 +329,83 @@ private fun BackupSection(vm: MainViewModel) {
 }
 
 /**
+ * 직접 등록한 음식만 파일 하나로 뽑는다.
+ *
+ * 쓸모는 **다음 앱 버전의 시드에 넣을 후보를 모으는 것**이다(ROADMAP 3번). 쓰면서 쌓인
+ * 음식을 개발자에게 파일로 넘기면 검수해서 시드에 합칠 수 있고, 그게 서버 없이 카탈로그를
+ * 키우는 이 앱의 경로다. 전체 백업과 같은 포맷이라 "골라서 가져오기"로 그대로 되읽힌다.
+ */
+@Composable
+private fun UserFoodExportSection(vm: MainViewModel) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var file by remember { mutableStateOf<File?>(null) }
+    var status by remember { mutableStateOf("") }
+    var working by remember { mutableStateOf(false) }
+
+    val saveLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(BackupFiles.MIME)
+    ) { uri: Uri? ->
+        val made = file
+        if (uri != null && made != null) {
+            ShareUtils.copyTo(context, made, uri)
+            status = "저장 완료"
+        }
+    }
+
+    Text("내 음식 내보내기", style = MaterialTheme.typography.titleMedium)
+    Spacer(Modifier.height(8.dp))
+    Text("직접 등록한 음식만 파일로 뽑습니다. 시드에 없는 음식을 모아 다음 버전에 넣을 때 씁니다.")
+    Spacer(Modifier.height(16.dp))
+
+    Button(
+        modifier = Modifier.fillMaxWidth(),
+        enabled = !working,
+        onClick = {
+            scope.launch {
+                working = true
+                status = runCatching {
+                    val snapshot = vm.buildUserFoodSnapshot()
+                    if (snapshot.foods.isEmpty()) null
+                    else withContext(Dispatchers.IO) { BackupFiles.writeUserFoods(context, snapshot) }
+                }.fold(
+                    onSuccess = { made ->
+                        file = made
+                        if (made == null) "직접 등록한 음식이 아직 없습니다." else "음식 ${'$'}{made.name}"
+                    },
+                    onFailure = { "내보내기 실패: ${'$'}{it.message}" }
+                )
+                working = false
+            }
+        }
+    ) { Text("내 음식 파일 만들기") }
+
+    Spacer(Modifier.height(8.dp))
+
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(
+            modifier = Modifier.weight(1f),
+            enabled = file != null,
+            onClick = {
+                file?.let {
+                    context.startActivity(ShareUtils.shareIntentFor(context, it, BackupFiles.MIME, "내 음식 공유하기"))
+                }
+            }
+        ) { Text("공유하기") }
+
+        Button(
+            modifier = Modifier.weight(1f),
+            enabled = file != null,
+            onClick = { file?.let { saveLauncher.launch(it.name) } }
+        ) { Text("파일로 저장") }
+    }
+
+    Spacer(Modifier.height(8.dp))
+    Text(status)
+}
+
+/**
  * 남의 백업 파일에서 원하는 것만 골라 가져온다.
  *
  * 일별 기록(식단·운동·신체)은 고를 수 없다 — 남의 하루 기록을 내 기록에 섞는 건 의미가
@@ -330,16 +415,19 @@ private fun BackupSection(vm: MainViewModel) {
 @Composable
 private fun SelectiveMergeDialog(
     snapshot: Snapshot,
-    onMerge: (List<RoutineDto>, List<DietTemplateDto>, List<ExerciseDto>) -> Unit,
+    onMerge: (List<RoutineDto>, List<DietTemplateDto>, List<ExerciseDto>, List<FoodDto>) -> Unit,
     onDismiss: () -> Unit
 ) {
     val routines = remember { mutableStateListOf<RoutineDto>() }
     val templates = remember { mutableStateListOf<DietTemplateDto>() }
     val exercises = remember { mutableStateListOf<ExerciseDto>() }
+    val foods = remember { mutableStateListOf<FoodDto>() }
 
-    // 시드 종목은 내게도 이미 있으니 굳이 고르게 하지 않는다. 남이 직접 만든 것만 보여준다.
+    // 시드 종목·음식은 내게도 이미 있으니 굳이 고르게 하지 않는다. 남이 직접 만든 것만 보여준다.
     val userExercises = remember(snapshot) { snapshot.exercises.filter { it.source == "USER" } }
-    val nothingPicked = routines.isEmpty() && templates.isEmpty() && exercises.isEmpty()
+    val userFoods = remember(snapshot) { snapshot.foods.filter { it.source == "USER" } }
+    val nothingPicked =
+        routines.isEmpty() && templates.isEmpty() && exercises.isEmpty() && foods.isEmpty()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -379,6 +467,18 @@ private fun SelectiveMergeDialog(
                         )
                     }
                 }
+                if (userFoods.isNotEmpty()) {
+                    item { SectionLabel("직접 등록한 음식") }
+                    items(userFoods, key = { "f" + it.slug + it.name }) { dto ->
+                        CheckRow(
+                            checked = dto in foods,
+                            title = dto.name,
+                            subtitle = dto.category +
+                                (dto.baseAmountGram?.let { " · 기준 ${it.toInt()}${dto.baseAmountUnit.lowercase()}" } ?: ""),
+                            onToggle = { if (dto in foods) foods.remove(dto) else foods.add(dto) }
+                        )
+                    }
+                }
                 item {
                     Text(
                         "고른 루틴이 쓰는 종목은 자동으로 같이 들어옵니다. " +
@@ -392,7 +492,9 @@ private fun SelectiveMergeDialog(
         confirmButton = {
             TextButton(
                 enabled = !nothingPicked,
-                onClick = { onMerge(routines.toList(), templates.toList(), exercises.toList()) }
+                onClick = {
+                    onMerge(routines.toList(), templates.toList(), exercises.toList(), foods.toList())
+                }
             ) { Text("가져오기") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }

@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -39,6 +40,47 @@ class SeedVersionTest {
 
     @After
     fun tearDown() = db.close()
+
+    /**
+     * 직접 등록한 음식을 나중에 고칠 수 있어야 한다. **시드 음식을 고치면 사용자 것으로
+     * 돌린다** — 안 그러면 다음 시드 갱신이 고친 값을 그대로 덮어써서, 고쳐도 소용없게 된다.
+     */
+    @Test
+    fun 음식을_고치면_다음_시드_갱신이_덮어쓰지_않는다() = runBlocking {
+        repo.applySeeds()
+        val chicken = requireNotNull(db.foodDao().findBySlug("chicken-breast-100g"))
+
+        assertTrue(repo.updateFood(chicken.copy(macros = Macros(kcal = 999.0), baseAmount = 123.0)))
+
+        // 시드를 처음부터 다시 돌려도(버전을 되돌린 상황) 고친 값이 살아남아야 한다.
+        db.appMetaDao().upsert(AppMeta(seedVersion = 0))
+        repo.applySeeds()
+
+        val after = requireNotNull(db.foodDao().findBySlug("chicken-breast-100g"))
+        assertEquals("고친 값이 시드로 되돌아갔다", 999.0, after.macros.kcal!!, 0.001)
+        assertEquals(123.0, after.baseAmount!!, 0.001)
+        assertEquals(ItemSource.USER, after.source)
+    }
+
+    /** 이름이 유니크라 겹치는 이름으로는 못 고친다. 조용히 실패하지 말고 거절해야 한다. */
+    @Test
+    fun 이름이_겹치면_고치지_않는다() = runBlocking {
+        repo.applySeeds()
+        val chicken = requireNotNull(db.foodDao().findBySlug("chicken-breast-100g"))
+        val rice = requireNotNull(db.foodDao().findBySlug("rice-brown-200g"))
+
+        assertFalse(repo.updateFood(chicken.copy(name = rice.name)))
+        assertEquals("거절했는데 이름이 바뀌었다", "닭가슴살", requireNotNull(db.foodDao().findBySlug("chicken-breast-100g")).name)
+    }
+
+    /** 우유·이온음료는 ml로 재는 것이라 시드 5단계가 단위를 바로잡아야 한다. */
+    @Test
+    fun 액체_시드는_ml로_들어온다() = runBlocking {
+        repo.applySeeds()
+
+        assertEquals(AmountUnit.ML, requireNotNull(db.foodDao().findBySlug("milk-200ml")).baseAmountUnit)
+        assertEquals(AmountUnit.G, requireNotNull(db.foodDao().findBySlug("chicken-breast-100g")).baseAmountUnit)
+    }
 
     @Test
     fun 첫_실행에_시드가_깔리고_버전이_기록된다() = runBlocking {
@@ -190,7 +232,7 @@ class SeedVersionTest {
     }
 
     /**
-     * 음식 이름에서 제공량을 떼고 [FoodItem.baseAmountGram]으로 옮긴 시드 4단계.
+     * 음식 이름에서 제공량을 떼고 [FoodItem.baseAmount]으로 옮긴 시드 4단계.
      * 실제로 잰 값이 있는 것만 채워지고, 없는 건 지어내지 않아야 한다.
      */
     @Test
@@ -199,10 +241,10 @@ class SeedVersionTest {
         val foods = repo.observeFoods().first()
 
         val chicken = foods.first { it.name == "닭가슴살" }
-        assertEquals("100g으로 적혀 있던 음식은 기준량을 알아야 한다", 100.0, chicken.baseAmountGram!!, 0.0)
+        assertEquals("100g으로 적혀 있던 음식은 기준량을 알아야 한다", 100.0, chicken.baseAmount!!, 0.0)
 
         val gimbap = foods.first { it.name == "김밥" }
-        assertNull("\"1줄\"은 그램을 몰라서 지어내면 안 된다", gimbap.baseAmountGram)
+        assertNull("\"1줄\"은 그램을 몰라서 지어내면 안 된다", gimbap.baseAmount)
     }
 
     /**
@@ -215,14 +257,14 @@ class SeedVersionTest {
         repo.applySeeds()
         val before = repo.observeFoods().first().first { it.slug == "chicken-breast-100g" }
         assertEquals("닭가슴살", before.name)
-        assertEquals(100.0, before.baseAmountGram!!, 0.0)
+        assertEquals(100.0, before.baseAmount!!, 0.0)
 
         db.appMetaDao().upsert(AppMeta(seedVersion = 0))
         repo.applySeeds()
 
         val after = repo.observeFoods().first().first { it.slug == "chicken-breast-100g" }
         assertEquals("재적용해도 SEED 항목은 같은 값으로 남아야 한다", "닭가슴살", after.name)
-        assertEquals(100.0, after.baseAmountGram!!, 0.0)
+        assertEquals(100.0, after.baseAmount!!, 0.0)
     }
 
     @Test

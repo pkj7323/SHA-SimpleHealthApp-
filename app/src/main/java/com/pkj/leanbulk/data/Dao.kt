@@ -211,7 +211,8 @@ interface FoodDao {
                         name = seed.name,
                         category = seed.category,
                         macros = seed.macros,
-                        baseAmountGram = seed.baseAmountGram
+                        baseAmount = seed.baseAmount,
+                        baseAmountUnit = seed.baseAmountUnit
                     )
                 )
             }

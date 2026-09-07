@@ -157,8 +157,9 @@ fun TodayDietScreen(vm: MainViewModel) {
             foods = foods,
             onConfirm = { food, multiplier -> vm.addFoodToMeal(index, food, multiplier) },
             onToggleFavorite = vm::toggleFoodFavorite,
-            onAddNewFood = { name, category, macros, baseAmountGram ->
-                vm.addNewFood(name, category, macros, baseAmountGram)
+            onEditFood = vm::updateFood,
+            onAddNewFood = { name, category, macros, baseAmount, unit ->
+                vm.addNewFood(name, category, macros, baseAmount, unit)
             },
             onHide = vm::hideFood,
             onDismiss = { foodPickerFor = null }
@@ -309,7 +310,8 @@ private fun MealCard(
 }
 
 private fun formatFoodQuantity(food: DraftMealFood): String {
-    val qty = food.amountGram?.let { "${it.roundToInt()}g" } ?: "×${formatNumber(food.multiplier)}"
+    val qty = food.amount?.let { "${it.roundToInt()}${food.amountUnit.label}" }
+        ?: "×${formatNumber(food.multiplier)}"
     return "$qty · ${formatMacros(food.macros)}"
 }
 

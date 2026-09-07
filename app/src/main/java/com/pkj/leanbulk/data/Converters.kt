@@ -42,4 +42,11 @@ class Converters {
     @TypeConverter
     fun stringToActivityLevel(value: String): ActivityLevel =
         runCatching { ActivityLevel.valueOf(value) }.getOrDefault(ActivityLevel.MEDIUM)
+
+    @TypeConverter
+    fun amountUnitToString(value: AmountUnit): String = value.name
+
+    @TypeConverter
+    fun stringToAmountUnit(value: String): AmountUnit =
+        runCatching { AmountUnit.valueOf(value) }.getOrDefault(AmountUnit.G)
 }

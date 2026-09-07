@@ -140,7 +140,7 @@ class SnapshotRoundTripTest {
         val chickenLine = meal.foods.first { it.name == "닭가슴살" }
         val chickenId = requireNotNull(db.foodDao().findBySlug("chicken-breast-100g")).id
         assertEquals("카탈로그 연결이 slug로 다시 안 이어졌다", chickenId, chickenLine.foodId)
-        assertEquals(150.0, chickenLine.amountGram!!, 0.001)
+        assertEquals(150.0, chickenLine.amount!!, 0.001)
 
         val aiLine = meal.foods.first { it.name == "그릭요거트 200g" }
         assertNull("카탈로그에 없던 줄이 엉뚱한 음식에 붙었다", aiLine.foodId)
@@ -307,7 +307,7 @@ class SnapshotRoundTripTest {
             FoodItem(
                 slug = "chicken-breast-100g", name = "닭가슴살", category = "육류",
                 macros = Macros(kcal = 165.0, protein = 31.0), usedCount = 42, source = ItemSource.SEED,
-                baseAmountGram = 100.0
+                baseAmount = 100.0
             )
         )
         // 숨긴 시드 음식도 백업에 실려야 복원했을 때 다시 튀어나오지 않는다.
@@ -337,13 +337,13 @@ class SnapshotRoundTripTest {
                 ) to listOf(
                     MealFood(
                         mealEntryId = 0, orderIndex = 0, foodId = chickenId, name = "닭가슴살",
-                        multiplier = 1.5, amountGram = 150.0,
+                        multiplier = 1.5, amount = 150.0,
                         macros = Macros(kcal = 247.5, protein = 46.5, carbs = 0.0, fat = 5.4, sugar = 0.0),
                         macroSource = MacroSource.CATALOG
                     ),
                     MealFood(
                         mealEntryId = 0, orderIndex = 1, foodId = null, name = "그릭요거트 200g",
-                        multiplier = 2.0, amountGram = null,
+                        multiplier = 2.0, amount = null,
                         macros = Macros(kcal = 194.0, protein = 18.0, carbs = 8.0, fat = 10.0, sugar = 8.0),
                         macroSource = MacroSource.AI_SUGGESTED
                     )
@@ -374,13 +374,13 @@ class SnapshotRoundTripTest {
             listOf(
                 MealPresetFood(
                     presetId = 0, orderIndex = 0, foodId = chickenId, name = "닭가슴살",
-                    multiplier = 1.5, amountGram = 150.0,
+                    multiplier = 1.5, amount = 150.0,
                     macros = Macros(kcal = 247.5, protein = 46.5, carbs = 0.0, fat = 5.4, sugar = 0.0),
                     macroSource = MacroSource.CATALOG
                 ),
                 MealPresetFood(
                     presetId = 0, orderIndex = 1, foodId = null, name = "그릭요거트 200g",
-                    multiplier = 2.0, amountGram = null,
+                    multiplier = 2.0, amount = null,
                     macros = Macros(kcal = 194.0, protein = 18.0, carbs = 8.0, fat = 10.0, sugar = 8.0),
                     macroSource = MacroSource.AI_SUGGESTED
                 )

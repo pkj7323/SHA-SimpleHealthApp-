@@ -32,14 +32,14 @@ class FoodQuantityPickerTest {
     private val chicken = FoodItem(
         id = 1, slug = "chicken-breast-100g", name = "닭가슴살", category = "육류",
         macros = Macros(kcal = 165.0, protein = 31.0, carbs = 0.0, fat = 3.6, sugar = 0.0),
-        source = ItemSource.SEED, baseAmountGram = 100.0
+        source = ItemSource.SEED, baseAmount = 100.0
     )
 
     /** 그램을 모르는 음식. 배수를 곱해도 그램을 지어내면 안 된다. */
     private val gimbap = FoodItem(
         id = 2, slug = "gimbap-1roll", name = "김밥", category = "간편식",
         macros = Macros(kcal = 400.0, protein = 10.0, carbs = 68.0, fat = 9.0, sugar = 3.0),
-        source = ItemSource.SEED, baseAmountGram = null
+        source = ItemSource.SEED, baseAmount = null
     )
 
     @Test
@@ -87,7 +87,8 @@ class FoodQuantityPickerTest {
                     foods = listOf(chicken, gimbap),
                     onConfirm = { food, multiplier -> picked = food to multiplier },
                     onToggleFavorite = {},
-                    onAddNewFood = { _, _, _, _ -> chicken },
+                    onEditFood = {},
+                    onAddNewFood = { _, _, _, _, _ -> chicken },
                     onHide = {},
                     onDismiss = {}
                 )

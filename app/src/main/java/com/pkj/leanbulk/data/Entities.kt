@@ -132,14 +132,29 @@ data class FoodItem(
     /** 검색 없이 목록 위쪽에서 바로 찾게 한다. [MealPreset](여러 음식+수량 묶음)과는 다른 기능이다. */
     @ColumnInfo(defaultValue = "0") val favorite: Boolean = false,
     /**
-     * 이 음식 "1"에 해당하는 그램(또는 ml). [Macros]는 이 양을 기준으로 한다.
+     * 이 음식 "1"에 해당하는 양. 단위는 [baseAmountUnit]이고, [Macros]는 이 양을 기준으로 한다.
      *
-     * **실제로 잰 값을 알 때만 채운다.** "김밥 1줄" 같은 항목은 그램을 모르므로 null로
+     * **실제로 잰 값을 알 때만 채운다.** "김밥 1줄" 같은 항목은 양을 모르므로 null로
      * 남긴다 — 여기서 숫자를 지어내면 이 앱이 지키는 "모르면 모른다"는 원칙이 스키마
-     * 단계에서부터 깨진다. null이면 배수만으로 기록하고 그램 표시는 하지 않는다.
+     * 단계에서부터 깨진다. null이면 배수만으로 기록하고 양 표시는 하지 않는다.
+     *
+     * 컬럼 이름에 `Gram`이 남아 있는 건 g만 있던 시절의 잔재다. 이름을 바꾸려면 테이블을
+     * 새로 만들어 옮겨 담아야 하는데(SQLite 3.19에 RENAME COLUMN이 없다), 눈에 보이지도
+     * 않는 이름 때문에 기록을 옮기는 위험을 지지 않는다.
      */
-    val baseAmountGram: Double? = null
+    @ColumnInfo(name = "baseAmountGram") val baseAmount: Double? = null,
+    /** [baseAmount]의 단위. 우유·음료처럼 ml/L로 재는 것이 있어서 g 하나로는 부족하다. */
+    @ColumnInfo(defaultValue = "G") val baseAmountUnit: AmountUnit = AmountUnit.G
 )
+
+/**
+ * 기준량의 단위.
+ *
+ * **서로 환산하지 않는다.** 1L 우유가 1000g이 아니듯(밀도가 1이 아니다) 물 말고는 ml↔g가
+ * 안 맞고, 여기서 환산 계수를 지어내면 이 앱이 지키는 "모르면 모른다"가 깨진다.
+ * 사용자가 적은 숫자에 사용자가 고른 단위를 그대로 붙여 보여줄 뿐이다.
+ */
+enum class AmountUnit(val label: String) { G("g"), ML("ml"), L("L") }
 
 /**
  * 끼니 안의 음식 한 줄.
@@ -168,8 +183,10 @@ data class MealFood(
     val foodId: Long? = null,
     val name: String,
     val multiplier: Double,
-    /** [FoodItem.baseAmountGram]이 null이면 이것도 null — 배수만 있고 그램은 표시하지 않는다. */
-    val amountGram: Double? = null,
+    /** [FoodItem.baseAmount]가 null이면 이것도 null — 배수만 있고 양은 표시하지 않는다. */
+    @ColumnInfo(name = "amountGram") val amount: Double? = null,
+    /** 단위도 같이 스냅샷한다 — 카탈로그에서 지워진 음식 줄도 제 단위로 보여야 한다. */
+    @ColumnInfo(defaultValue = "G") val amountUnit: AmountUnit = AmountUnit.G,
     @androidx.room.Embedded val macros: Macros,
     @ColumnInfo(defaultValue = "CATALOG") val macroSource: MacroSource = MacroSource.CATALOG
 )
@@ -188,7 +205,8 @@ fun FoodItem.toMealFood(mealEntryId: Long, orderIndex: Int, multiplier: Double):
     foodId = id,
     name = name,
     multiplier = multiplier,
-    amountGram = baseAmountGram?.times(multiplier),
+    amount = baseAmount?.times(multiplier),
+    amountUnit = baseAmountUnit,
     macros = macros.scaledBy(multiplier),
     macroSource = MacroSource.CATALOG
 )
@@ -226,7 +244,8 @@ data class MealPresetFood(
     val foodId: Long? = null,
     val name: String,
     val multiplier: Double,
-    val amountGram: Double? = null,
+    @ColumnInfo(name = "amountGram") val amount: Double? = null,
+    @ColumnInfo(defaultValue = "G") val amountUnit: AmountUnit = AmountUnit.G,
     @androidx.room.Embedded val macros: Macros,
     @ColumnInfo(defaultValue = "CATALOG") val macroSource: MacroSource = MacroSource.CATALOG
 )

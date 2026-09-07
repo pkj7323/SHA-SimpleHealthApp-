@@ -1,5 +1,6 @@
 package com.pkj.leanbulk.ui
 
+import com.pkj.leanbulk.data.AmountUnit
 import com.pkj.leanbulk.data.FoodItem
 import com.pkj.leanbulk.data.MacroSource
 import com.pkj.leanbulk.data.Macros
@@ -13,7 +14,8 @@ data class DraftMealFood(
     val foodId: Long?,
     val name: String,
     val multiplier: Double,
-    val amountGram: Double?,
+    val amount: Double?,
+    val amountUnit: AmountUnit,
     val macros: Macros,
     val macroSource: MacroSource
 )
@@ -23,7 +25,8 @@ fun FoodItem.toDraftMealFood(multiplier: Double): DraftMealFood = DraftMealFood(
     foodId = id,
     name = name,
     multiplier = multiplier,
-    amountGram = baseAmountGram?.times(multiplier),
+    amount = baseAmount?.times(multiplier),
+    amountUnit = baseAmountUnit,
     macros = macros.scaledBy(multiplier),
     macroSource = MacroSource.CATALOG
 )
@@ -59,7 +62,7 @@ fun DraftMeal.recomputeFromFoods(): DraftMeal = copy(
 )
 
 private fun List<DraftMealFood>.summaryText(): String = joinToString(" + ") { f ->
-    val qty = f.amountGram?.let { "${it.roundToInt()}g" } ?: "×${formatMultiplier(f.multiplier)}"
+    val qty = f.amount?.let { "${it.roundToInt()}${f.amountUnit.label}" } ?: "×${formatMultiplier(f.multiplier)}"
     "${f.name} $qty"
 }
 
@@ -149,7 +152,8 @@ fun MealEntryWithFoods.toDraft(): DraftMeal {
             foodId = it.foodId,
             name = it.name,
             multiplier = it.multiplier,
-            amountGram = it.amountGram,
+            amount = it.amount,
+            amountUnit = it.amountUnit,
             macros = it.macros,
             macroSource = it.macroSource
         )
@@ -187,7 +191,8 @@ fun List<DraftMeal>.toMealEntryPairs(date: String): List<Pair<MealEntry, List<Me
                 foodId = f.foodId,
                 name = f.name,
                 multiplier = f.multiplier,
-                amountGram = f.amountGram,
+                amount = f.amount,
+                amountUnit = f.amountUnit,
                 macros = f.macros,
                 macroSource = f.macroSource
             )

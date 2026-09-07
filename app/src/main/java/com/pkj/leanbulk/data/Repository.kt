@@ -3,6 +3,7 @@ package com.pkj.leanbulk.data
 import androidx.room.withTransaction
 import com.pkj.leanbulk.data.backup.DietTemplateDto
 import com.pkj.leanbulk.data.backup.ExerciseDto
+import com.pkj.leanbulk.data.backup.FoodDto
 import com.pkj.leanbulk.data.backup.RoutineDto
 import com.pkj.leanbulk.data.backup.Snapshot
 import com.pkj.leanbulk.data.backup.SnapshotCodec
@@ -67,8 +68,14 @@ class Repository(private val db: AppDatabase) {
         }
 
         if (applied < 4) {
-            // 음식 이름에서 제공량을 떼고 baseAmountGram으로 옮겼다(DIET-REDESIGN.md).
+            // 음식 이름에서 제공량을 떼고 기준량으로 옮겼다(DIET-REDESIGN.md).
             // upsertSeed가 멱등이라 다시 돌려도 기존 SEED 행의 이름·기준량만 갱신된다.
+            SeedData.foodCatalog.forEach { foodDao.upsertSeed(it.toEntity()) }
+        }
+
+        if (applied < 5) {
+            // 기준량에 단위가 생겼다(g/ml/L). 우유·저지방우유·이온음료는 원래 ml인데
+            // g로 들어가 있어서 바로잡는다. 사용자가 고친 행(source = USER)은 안 건드린다.
             SeedData.foodCatalog.forEach { foodDao.upsertSeed(it.toEntity()) }
         }
 
@@ -150,16 +157,37 @@ class Repository(private val db: AppDatabase) {
     suspend fun setFoodFavorite(id: Long, favorite: Boolean) = foodDao.setFavorite(id, favorite)
 
     /** "직접 등록" — 검색해도 없는 새 음식을 카탈로그에 바로 추가한다. 종목의 [addUserExercise]와 같은 자리. */
-    suspend fun addUserFood(name: String, category: String, macros: Macros, baseAmountGram: Double?): FoodItem {
+    suspend fun addUserFood(
+        name: String,
+        category: String,
+        macros: Macros,
+        baseAmount: Double?,
+        baseAmountUnit: AmountUnit
+    ): FoodItem {
         val entity = FoodItem(
             slug = "user-" + name.trim().lowercase().replace(Regex("\\s+"), "-") + "-" + System.currentTimeMillis(),
             name = name.trim(),
             category = category,
             macros = macros,
             source = ItemSource.USER,
-            baseAmountGram = baseAmountGram
+            baseAmount = baseAmount,
+            baseAmountUnit = baseAmountUnit
         )
         return entity.copy(id = foodDao.insertReturningId(entity))
+    }
+
+    /**
+     * 직접 등록한 음식을 나중에 고친다. 이름이 다른 음식과 겹치면 **고치지 않고 false**를 준다
+     * (`food_item.name`이 유니크라 그대로 밀어 넣으면 예외가 난다).
+     *
+     * 시드 음식을 고치면 그 행을 `USER`로 돌린다. 안 그러면 다음 시드 갱신이 사용자가
+     * 고친 값을 그대로 덮어써서, 고쳐도 소용없는 것처럼 보인다(`FoodDao.upsertSeed`).
+     */
+    suspend fun updateFood(food: FoodItem): Boolean {
+        val sameName = foodDao.findByName(food.name.trim())
+        if (sameName != null && sameName.id != food.id) return false
+        foodDao.update(food.copy(name = food.name.trim(), source = ItemSource.USER))
+        return true
     }
 
     // ---------- 내 식사(식사세트) ----------
@@ -276,6 +304,24 @@ class Repository(private val db: AppDatabase) {
 
     // ---------- 백업 스냅샷 ----------
 
+    /**
+     * **직접 등록한 음식만** 스냅샷 하나에 담는다(ROADMAP 3번 "시드 승격").
+     *
+     * 시드로 깔린 음식은 뺀다 — 이미 앱에 들어 있으니 다시 내보낼 이유가 없고, 이 파일의
+     * 쓸모가 "다음 버전 시드에 넣을 후보"이기 때문이다. 숨긴 음식도 뺀다(치워둔 걸 다시
+     * 올릴 이유가 없다).
+     *
+     * 포맷은 일반 백업과 같은 [Snapshot]이다. 따로 만들면 읽는 코드가 두 벌이 되고,
+     * 이 파일 그대로 "골라서 가져오기"에 넣을 수도 있다.
+     */
+    suspend fun exportUserFoods(exportedAt: String): Snapshot = Snapshot(
+        exportedAt = exportedAt,
+        seedVersion = seedVersion(),
+        foods = foodDao.getAll()
+            .filter { it.source == ItemSource.USER && !it.hidden }
+            .map { it.toDto() }
+    )
+
     /** 지금 DB 전체를 스냅샷 하나로 뜬다. 백업 파일과 동기화가 같은 포맷을 쓴다. */
     suspend fun exportSnapshot(exportedAt: String): Snapshot = db.withTransaction {
         val catalog = exerciseDao.getAll()
@@ -387,7 +433,8 @@ class Repository(private val db: AppDatabase) {
         catalog: List<ExerciseDto>,
         routines: List<RoutineDto>,
         dietTemplates: List<DietTemplateDto>,
-        exercises: List<ExerciseDto>
+        exercises: List<ExerciseDto>,
+        foods: List<FoodDto> = emptyList()
     ): MergeResult = db.withTransaction {
         val catalogBySlug = catalog.associateBy { it.slug }
 
@@ -435,10 +482,24 @@ class Repository(private val db: AppDatabase) {
             addedTemplates++
         }
 
+        // 음식은 slug로 대조한다. 이미 있으면 건너뛴다 — 남의 파일이 내가 고쳐둔
+        // 영양정보를 덮어쓰면 안 된다. 이름만 겹치는 경우는 뒤에 번호를 붙여 둘 다 남긴다
+        // (`food_item.name`이 유니크라 그대로 넣으면 삽입이 조용히 무시된다).
+        val takenFoodNames = foodDao.getAll().map { it.name }.toMutableSet()
+        var addedFoods = 0
+        foods.forEach { dto ->
+            if (foodDao.findBySlug(dto.slug) != null) return@forEach
+            val name = uniqueName(dto.name, takenFoodNames)
+            takenFoodNames += name
+            foodDao.insert(dto.toEntity().copy(name = name, source = ItemSource.USER))
+            addedFoods++
+        }
+
         MergeResult(
             routines = addedRoutines,
             dietTemplates = addedTemplates,
-            exercises = addedExercises
+            exercises = addedExercises,
+            foods = addedFoods
         )
     }
 

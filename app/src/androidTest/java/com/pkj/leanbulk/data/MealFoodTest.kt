@@ -43,14 +43,14 @@ class MealFoodTest {
         val chicken = FoodItem(
             id = 1, slug = "chicken-breast-100g", name = "닭가슴살", category = "육류",
             macros = Macros(kcal = 165.0, protein = 31.0, carbs = 0.0, fat = 3.6, sugar = 0.0),
-            source = ItemSource.SEED, baseAmountGram = 100.0
+            source = ItemSource.SEED, baseAmount = 100.0
         )
 
         val line = chicken.toMealFood(mealEntryId = 0, orderIndex = 0, multiplier = 1.5)
 
         assertEquals(247.5, line.macros.kcal!!, 0.001)
         assertEquals(46.5, line.macros.protein!!, 0.001)
-        assertEquals("기준량 × 배수여야 한다", 150.0, line.amountGram!!, 0.001)
+        assertEquals("기준량 × 배수여야 한다", 150.0, line.amount!!, 0.001)
         assertEquals(MacroSource.CATALOG, line.macroSource)
     }
 
@@ -63,13 +63,13 @@ class MealFoodTest {
         val gimbap = FoodItem(
             id = 2, slug = "gimbap-1roll", name = "김밥", category = "간편식",
             macros = Macros(kcal = 400.0, protein = 10.0, carbs = 68.0, fat = 9.0, sugar = 3.0),
-            source = ItemSource.SEED, baseAmountGram = null
+            source = ItemSource.SEED, baseAmount = null
         )
 
         val line = gimbap.toMealFood(mealEntryId = 0, orderIndex = 0, multiplier = 2.0)
 
         assertEquals(800.0, line.macros.kcal!!, 0.001)
-        assertNull("그램을 모르는데 계산해내면 안 된다", line.amountGram)
+        assertNull("그램을 모르는데 계산해내면 안 된다", line.amount)
     }
 
     /** null(모름)에 배수를 곱해도 여전히 null이어야 한다 — 모르는 값에서 숫자를 만들어내면 안 된다. */
@@ -86,7 +86,7 @@ class MealFoodTest {
     fun 끼니를_저장하고_불러오면_음식_줄이_그대로_남는다() = runBlocking {
         val chicken = FoodItem(
             slug = "chicken-breast-100g", name = "닭가슴살", category = "육류",
-            macros = Macros(kcal = 165.0, protein = 31.0), source = ItemSource.SEED, baseAmountGram = 100.0
+            macros = Macros(kcal = 165.0, protein = 31.0), source = ItemSource.SEED, baseAmount = 100.0
         )
         val foodId = db.foodDao().run { insert(chicken); findBySlug(chicken.slug)!!.id }
 
@@ -102,7 +102,7 @@ class MealFoodTest {
         assertEquals(1, saved.foods.size)
         val savedFood = saved.foods.single()
         assertEquals("닭가슴살", savedFood.name)
-        assertEquals(150.0, savedFood.amountGram!!, 0.001)
+        assertEquals(150.0, savedFood.amount!!, 0.001)
         assertEquals(247.5, savedFood.macros.kcal!!, 0.001)
     }
 
@@ -115,7 +115,7 @@ class MealFoodTest {
         )
         val firstFood = MealFood(
             mealEntryId = 0, orderIndex = 0, name = "닭가슴살", multiplier = 1.0,
-            amountGram = 100.0, macros = Macros(kcal = 165.0), macroSource = MacroSource.CATALOG
+            amount = 100.0, macros = Macros(kcal = 165.0), macroSource = MacroSource.CATALOG
         )
         repo.saveMealDay("2026-09-06", listOf(entry to listOf(firstFood)))
 

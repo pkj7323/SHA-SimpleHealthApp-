@@ -262,6 +262,23 @@ internal val MIGRATION_12_13 = Migration(12, 13) { db ->
     )
 }
 
+/**
+ * 13 → 14: 기준량에 단위가 붙는다(g / ml / L).
+ *
+ * 지금까지는 전부 g로 취급했으므로 기존 행은 **전부 `G`가 맞다** — 기본값으로 채우면 끝이고
+ * 값 자체는 건드리지 않는다. 우유 200ml를 `200`으로 적어둔 사람이 있을 수 있지만, 그건
+ * 사용자만 아는 사실이라 여기서 추측해 바꾸면 없던 데이터를 지어내는 셈이 된다.
+ *
+ * 양을 담는 컬럼 이름은 `amountGram`/`baseAmountGram` 그대로 둔다. Kotlin 쪽에서는
+ * `@ColumnInfo(name = ...)`로 `amount`/`baseAmount`라 부르므로 코드는 정직하고,
+ * 컬럼 이름을 바꾸려면 SQLite 3.19에 RENAME COLUMN이 없어 테이블을 통째로 옮겨 담아야 한다.
+ */
+internal val MIGRATION_13_14 = Migration(13, 14) { db ->
+    db.execSQL("ALTER TABLE `food_item` ADD COLUMN `baseAmountUnit` TEXT NOT NULL DEFAULT 'G'")
+    db.execSQL("ALTER TABLE `meal_food` ADD COLUMN `amountUnit` TEXT NOT NULL DEFAULT 'G'")
+    db.execSQL("ALTER TABLE `meal_preset_food` ADD COLUMN `amountUnit` TEXT NOT NULL DEFAULT 'G'")
+}
+
 @Database(
     entities = [
         MealEntry::class,
@@ -281,7 +298,7 @@ internal val MIGRATION_12_13 = Migration(12, 13) { db ->
         AppMeta::class,
         Exercise::class
     ],
-    version = 13,
+    version = 14,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -312,11 +329,11 @@ abstract class AppDatabase : RoomDatabase() {
          */
         internal val MIGRATIONS = arrayOf(
             MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
-            MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13
+            MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14
         )
 
         /** 마이그레이션 테스트가 참조한다. `@Database`의 version과 항상 같아야 한다. */
-        internal const val VERSION = 13
+        internal const val VERSION = 14
 
         fun get(context: Context): AppDatabase =
             instance ?: synchronized(this) {

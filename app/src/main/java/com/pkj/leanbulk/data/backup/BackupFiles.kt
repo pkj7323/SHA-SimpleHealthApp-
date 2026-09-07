@@ -31,6 +31,13 @@ object BackupFiles {
         return file
     }
 
+    /** 직접 등록한 음식만 담은 파일. 백업과 구분되게 이름을 다르게 준다. */
+    fun writeUserFoods(context: Context, snapshot: Snapshot): File {
+        val file = File(exportDir(context), "내음식-${LocalDateTime.now().format(STAMP)}.json.gz")
+        file.outputStream().use { it.write(SnapshotCodec.gzip(snapshot)) }
+        return file
+    }
+
     /** 사용자가 고른 파일을 읽어 스냅샷으로 되돌린다. gzip이 아니면 예외가 난다. */
     fun read(context: Context, uri: Uri): Snapshot =
         requireNotNull(context.contentResolver.openInputStream(uri)) { "파일을 열 수 없습니다" }

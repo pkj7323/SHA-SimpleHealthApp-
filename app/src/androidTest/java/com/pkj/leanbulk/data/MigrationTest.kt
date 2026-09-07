@@ -323,6 +323,32 @@ class MigrationTest {
             }
     }
 
+    /**
+     * 13 → 14: 기준량에 단위가 붙는다.
+     *
+     * 지금까지 저장된 값은 전부 g였으므로 **기존 행은 `G`로 채워져야 한다.** 여기서 값을
+     * 추측해 바꾸면(예: 이름에 ml이 있으니 ML로) 사용자만 아는 사실을 앱이 지어내는 셈이다.
+     */
+    @Test
+    fun 기준량_단위가_붙고_기존_행은_g로_남는다() {
+        helper.createDatabase(TEST_DB, 13).use { db ->
+            db.execSQL(
+                "INSERT INTO food_item (slug, name, category, kcal, usedCount, source, hidden, favorite, baseAmountGram) " +
+                    "VALUES ('milk-200ml', '우유', '계란·유제품', 125.0, 0, 'USER', 0, 0, 200.0)"
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, AppDatabase.VERSION, true, *AppDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT name, baseAmountGram, baseAmountUnit FROM food_item").use { c ->
+                    assertTrue("기존 음식이 사라졌다", c.moveToFirst())
+                    assertEquals("우유", c.getString(0))
+                    assertEquals("기준량 값이 바뀌었다", 200.0, c.getDouble(1), 0.001)
+                    assertEquals("이름만 보고 단위를 추측하면 안 된다", "G", c.getString(2))
+                }
+            }
+    }
+
     @Test
     fun 선언한_버전과_실제_DB_버전이_같다() {
         val db = helper.createDatabase(TEST_DB, AppDatabase.VERSION)

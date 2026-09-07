@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
@@ -38,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.pkj.leanbulk.data.AmountUnit
 import com.pkj.leanbulk.data.FoodItem
 import com.pkj.leanbulk.data.Macros
 import kotlinx.coroutines.launch
@@ -62,14 +64,40 @@ fun FoodQuantityPickerDialog(
     foods: List<FoodItem>,
     onConfirm: (FoodItem, Double) -> Unit,
     onToggleFavorite: (FoodItem) -> Unit,
-    onAddNewFood: suspend (name: String, category: String, macros: Macros, baseAmountGram: Double?) -> FoodItem,
+    onEditFood: (FoodItem) -> Unit,
+    onAddNewFood: suspend (
+        name: String, category: String, macros: Macros, baseAmount: Double?, unit: AmountUnit
+    ) -> FoodItem,
     onHide: (Long) -> Unit,
     onDismiss: () -> Unit
 ) {
     var selected by remember { mutableStateOf<FoodItem?>(null) }
     var tab by remember { mutableStateOf(FoodPickerTab.SEARCH) }
     var showDirectRegister by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<FoodItem?>(null) }
     val scope = rememberCoroutineScope()
+
+    editing?.let { food ->
+        FoodFormDialog(
+            title = "음식 수정",
+            confirmText = "저장",
+            initial = food,
+            onConfirm = { name, category, macros, baseAmount, unit ->
+                onEditFood(
+                    food.copy(
+                        name = name,
+                        category = category,
+                        macros = macros,
+                        baseAmount = baseAmount,
+                        baseAmountUnit = unit
+                    )
+                )
+                editing = null
+            },
+            onDismiss = { editing = null }
+        )
+        return
+    }
 
     selected?.let { food ->
         FoodQuantityDialog(
@@ -84,10 +112,13 @@ fun FoodQuantityPickerDialog(
     }
 
     if (showDirectRegister) {
-        DirectRegisterFoodDialog(
-            onConfirm = { name, category, macros, baseAmountGram ->
+        FoodFormDialog(
+            title = "음식 직접 등록",
+            confirmText = "등록",
+            initial = null,
+            onConfirm = { name, category, macros, baseAmount, unit ->
                 scope.launch {
-                    val created = onAddNewFood(name, category, macros, baseAmountGram)
+                    val created = onAddNewFood(name, category, macros, baseAmount, unit)
                     showDirectRegister = false
                     selected = created // 등록하자마자 수량을 정해 바로 담을 수 있게 이어준다.
                 }
@@ -118,12 +149,14 @@ fun FoodQuantityPickerDialog(
                         onPick = { selected = it },
                         onHide = onHide,
                         onToggleFavorite = onToggleFavorite,
+                        onEdit = { editing = it },
                         onDirectRegister = { showDirectRegister = true }
                     )
                     FoodPickerTab.FAVORITE -> FavoriteFoodTab(
                         foods = foods.filter { it.favorite },
                         onPick = { selected = it },
-                        onToggleFavorite = onToggleFavorite
+                        onToggleFavorite = onToggleFavorite,
+                        onEdit = { editing = it }
                     )
                 }
             }
@@ -138,6 +171,7 @@ private fun SearchFoodTab(
     onPick: (FoodItem) -> Unit,
     onHide: (Long) -> Unit,
     onToggleFavorite: (FoodItem) -> Unit,
+    onEdit: (FoodItem) -> Unit,
     onDirectRegister: () -> Unit
 ) {
     var query by remember { mutableStateOf("") }
@@ -215,6 +249,7 @@ private fun SearchFoodTab(
                     food = food,
                     onPick = { onPick(food) },
                     onToggleFavorite = { onToggleFavorite(food) },
+                    onEdit = { onEdit(food) },
                     trailing = {
                         IconButton(onClick = { onHide(food.id) }) {
                             Icon(Icons.Filled.Delete, contentDescription = "목록에서 숨기기")
@@ -230,7 +265,8 @@ private fun SearchFoodTab(
 private fun FavoriteFoodTab(
     foods: List<FoodItem>,
     onPick: (FoodItem) -> Unit,
-    onToggleFavorite: (FoodItem) -> Unit
+    onToggleFavorite: (FoodItem) -> Unit,
+    onEdit: (FoodItem) -> Unit
 ) {
     Column(Modifier.padding(top = 8.dp)) {
         if (foods.isEmpty()) {
@@ -241,7 +277,12 @@ private fun FavoriteFoodTab(
         }
         LazyColumn(Modifier.heightIn(max = 360.dp)) {
             items(foods, key = { it.id }) { food ->
-                FoodRow(food = food, onPick = { onPick(food) }, onToggleFavorite = { onToggleFavorite(food) })
+                FoodRow(
+                    food = food,
+                    onPick = { onPick(food) },
+                    onToggleFavorite = { onToggleFavorite(food) },
+                    onEdit = { onEdit(food) }
+                )
             }
         }
     }
@@ -258,6 +299,7 @@ private fun FoodRow(
     food: FoodItem,
     onPick: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onEdit: () -> Unit,
     trailing: @Composable (() -> Unit)? = null
 ) {
     Row(
@@ -282,6 +324,9 @@ private fun FoodRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
+        IconButton(onClick = onEdit, modifier = Modifier.testTag("food_edit_${food.id}")) {
+            Icon(Icons.Filled.Edit, contentDescription = "음식 수정")
+        }
         trailing?.invoke()
     }
 }
@@ -301,7 +346,7 @@ fun FoodQuantityDialog(
 ) {
     var multiplier by remember { mutableStateOf(initialMultiplier) }
     val macros = remember(multiplier) { food.macros.scaledBy(multiplier) }
-    val amountGram = remember(multiplier) { food.baseAmountGram?.times(multiplier) }
+    val amount = remember(multiplier) { food.baseAmount?.times(multiplier) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -315,9 +360,9 @@ fun FoodQuantityDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) { multiplier = it.coerceAtLeast(0.5) }
 
-                amountGram?.let {
+                amount?.let {
                     Text(
-                        "${it.roundToInt()}g",
+                        "${it.roundToInt()}${food.baseAmountUnit.label}",
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(top = 8.dp).testTag("food_quantity_gram")
                     )
@@ -334,25 +379,32 @@ fun FoodQuantityDialog(
     )
 }
 
-/** 검색해도 없는 음식을 새로 카탈로그에 만든다(§9.6, 종목의 "직접 추가"와 같은 자리). */
+/**
+ * 음식 하나를 적는 폼. **직접 등록과 수정이 같은 화면을 쓴다** — 적는 항목이 똑같은데
+ * 화면을 둘로 두면 한쪽만 고치는 실수가 난다. [initial]이 있으면 그 값으로 채우고 수정이 된다.
+ */
 @Composable
-private fun DirectRegisterFoodDialog(
-    onConfirm: (name: String, category: String, macros: Macros, baseAmountGram: Double?) -> Unit,
+private fun FoodFormDialog(
+    title: String,
+    confirmText: String,
+    initial: FoodItem?,
+    onConfirm: (name: String, category: String, macros: Macros, baseAmount: Double?, unit: AmountUnit) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(initial?.name ?: "") }
     // 비워두면 "기타"로 저장한다. 미리 채워두면 지우고 쓰는 사람이 매번 지워야 한다.
-    var category by remember { mutableStateOf("") }
-    var kcal by remember { mutableStateOf<Double?>(null) }
-    var protein by remember { mutableStateOf<Double?>(null) }
-    var carbs by remember { mutableStateOf<Double?>(null) }
-    var fat by remember { mutableStateOf<Double?>(null) }
-    var sugar by remember { mutableStateOf<Double?>(null) }
-    var baseAmountGram by remember { mutableStateOf<Double?>(null) }
+    var category by remember { mutableStateOf(initial?.category ?: "") }
+    var kcal by remember { mutableStateOf(initial?.macros?.kcal) }
+    var protein by remember { mutableStateOf(initial?.macros?.protein) }
+    var carbs by remember { mutableStateOf(initial?.macros?.carbs) }
+    var fat by remember { mutableStateOf(initial?.macros?.fat) }
+    var sugar by remember { mutableStateOf(initial?.macros?.sugar) }
+    var baseAmount by remember { mutableStateOf(initial?.baseAmount) }
+    var unit by remember { mutableStateOf(initial?.baseAmountUnit ?: AmountUnit.G) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("음식 직접 등록") },
+        title = { Text(title) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 OutlinedTextField(
@@ -385,14 +437,28 @@ private fun DirectRegisterFoodDialog(
                     NullableNumberField("지방", fat) { fat = it }
                     NullableNumberField("당", sugar) { sugar = it }
                 }
-                NullableNumberField(
-                    label = "기준량(g)",
-                    value = baseAmountGram,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    onValueChange = { baseAmountGram = it }
-                )
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    NullableNumberField(
+                        label = "기준량",
+                        value = baseAmount,
+                        modifier = Modifier.weight(1f),
+                        onValueChange = { baseAmount = it }
+                    )
+                    AmountUnit.entries.forEach { u ->
+                        FilterChip(
+                            selected = unit == u,
+                            onClick = { unit = u },
+                            label = { Text(u.label) },
+                            modifier = Modifier.testTag("unit_${u.name}")
+                        )
+                    }
+                }
                 Text(
-                    "위 영양정보가 몇 g 기준인지. 모르면 비워두세요 — 그때는 배수(×1, ×2)로만 담깁니다.",
+                    "위 영양정보가 얼마를 기준으로 한 값인지. 모르면 비워두세요 — 그때는 배수(×1, ×2)로만 담깁니다.",
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 4.dp)
                 )
@@ -401,10 +467,16 @@ private fun DirectRegisterFoodDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    onConfirm(name.trim(), category.ifBlank { "기타" }, Macros(kcal, protein, carbs, fat, sugar), baseAmountGram)
+                    onConfirm(
+                        name.trim(),
+                        category.ifBlank { "기타" },
+                        Macros(kcal, protein, carbs, fat, sugar),
+                        baseAmount,
+                        unit
+                    )
                 },
                 enabled = name.isNotBlank()
-            ) { Text("등록") }
+            ) { Text(confirmText) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
     )

@@ -85,7 +85,9 @@ data class MealFoodDto(
     val foodSlug: String? = null,
     val name: String,
     val multiplier: Double,
+    /** JSON 키는 g만 있던 시절 이름 그대로다. 단위는 [amountUnit]이 들고 있다(옛 백업은 전부 g). */
     val amountGram: Double? = null,
+    val amountUnit: String = "G",
     val macros: MacrosDto,
     val macroSource: String = "CATALOG"
 )
@@ -202,8 +204,10 @@ data class FoodDto(
     val usedCount: Int,
     val source: String = "USER",
     val hidden: Boolean = false,
-    /** 이 음식 "1"에 해당하는 그램. 실측하지 않은 음식은 null(옛 백업도 전부 null로 읽힌다). */
+    /** 이 음식 "1"에 해당하는 양. 실측하지 않은 음식은 null(옛 백업도 전부 null로 읽힌다). */
     val baseAmountGram: Double? = null,
+    /** 기준량의 단위(G/ML/L). 옛 백업엔 없고, 그때는 전부 g였으므로 기본값이 맞다. */
+    val baseAmountUnit: String = "G",
     val favorite: Boolean = false
 )
 
@@ -222,6 +226,7 @@ data class MealPresetFoodDto(
     val name: String,
     val multiplier: Double,
     val amountGram: Double? = null,
+    val amountUnit: String = "G",
     val macros: MacrosDto,
     val macroSource: String = "CATALOG"
 )

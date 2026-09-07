@@ -1,6 +1,7 @@
 package com.pkj.leanbulk.ui
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.pkj.leanbulk.data.AmountUnit
 import com.pkj.leanbulk.data.MacroSource
 import com.pkj.leanbulk.data.Macros
 import org.junit.Assert.assertEquals
@@ -18,12 +19,18 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class DietDraftTest {
 
-    private fun food(name: String, kcal: Double?, protein: Double?, gram: Double?, multiplier: Double = 1.0) =
-        DraftMealFood(
-            foodId = 1, name = name, multiplier = multiplier, amountGram = gram,
-            macros = Macros(kcal = kcal, protein = protein, carbs = 0.0, fat = 0.0, sugar = 0.0),
-            macroSource = MacroSource.CATALOG
-        )
+    private fun food(
+        name: String,
+        kcal: Double?,
+        protein: Double?,
+        gram: Double?,
+        multiplier: Double = 1.0,
+        unit: AmountUnit = AmountUnit.G
+    ) = DraftMealFood(
+        foodId = 1, name = name, multiplier = multiplier, amount = gram, amountUnit = unit,
+        macros = Macros(kcal = kcal, protein = protein, carbs = 0.0, fat = 0.0, sugar = 0.0),
+        macroSource = MacroSource.CATALOG
+    )
 
     @Test
     fun 음식_줄_매크로를_더해서_끼니_요약을_다시_계산한다() {
@@ -68,6 +75,17 @@ class DietDraftTest {
 
         assertEquals(192.0, meal.macros.kcal!!, 0.001)
         assertNull("한쪽 단백질이 모르는데 합계가 나오면 안 된다", meal.macros.protein)
+    }
+
+    /** ml로 재는 음식은 요약에도 ml로 적혀야 한다 — g로 적으면 사실이 아닌 값이 기록에 남는다. */
+    @Test
+    fun ml로_잰_음식은_요약도_ml로_적힌다() {
+        val meal = DraftMeal(
+            slotName = "간식",
+            foods = listOf(food("우유", 125.0, 6.6, 200.0, unit = AmountUnit.ML))
+        ).recomputeFromFoods()
+
+        assertEquals("우유 200ml", meal.menuText)
     }
 
     /** 음식을 다 지우면 다시 "모름"이 된다(0으로 남으면 "정말 0을 먹음"과 헷갈린다). */
