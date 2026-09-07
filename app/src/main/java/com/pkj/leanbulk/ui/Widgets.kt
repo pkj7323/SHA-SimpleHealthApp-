@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -175,6 +176,57 @@ fun TextInputDialog(
         },
         confirmButton = { TextButton(onClick = { onConfirm(text) }) { Text(confirmText) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
+    )
+}
+
+/**
+ * 메모를 적는 작은 창. 끼니와 운동 종목이 같이 쓴다.
+ *
+ * 카드 안에 입력 칸을 박지 않고 창을 따로 띄우는 이유는, 메모가 몇 줄만 돼도 카드가
+ * 세로로 늘어나 정작 자주 만지는 세트·음식 줄이 화면 밖으로 밀리기 때문이다.
+ *
+ * **지우기는 따로 신호를 두지 않는다** — [onConfirm]에 빈 글자가 가면 지운 것이다.
+ * 저장·삭제가 결국 같은 한 칸을 쓰는 일이라 경로를 둘로 나눌 이유가 없다.
+ */
+@Composable
+fun MemoDialog(
+    title: String,
+    initial: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var text by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("메모") },
+                minLines = 3,
+                maxLines = 8,
+                modifier = Modifier.fillMaxWidth().testTag("memo_field")
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(text.trim()) },
+                modifier = Modifier.testTag("memo_save")
+            ) { Text("저장") }
+        },
+        dismissButton = {
+            Row {
+                // 이미 적어둔 게 있을 때만 보여준다. 빈 메모에 삭제 버튼은 뜻이 없다.
+                if (initial.isNotBlank()) {
+                    TextButton(
+                        onClick = { onConfirm("") },
+                        modifier = Modifier.testTag("memo_delete")
+                    ) { Text("삭제") }
+                }
+                TextButton(onClick = onDismiss) { Text("취소") }
+            }
+        }
     )
 }
 

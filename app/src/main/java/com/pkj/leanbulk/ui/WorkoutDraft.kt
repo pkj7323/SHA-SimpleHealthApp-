@@ -28,7 +28,12 @@ data class DraftExercise(
     val defaultSetting: String = "",
     val exerciseId: Long? = null,
     val trackingType: TrackingType = TrackingType.WEIGHT_REPS,
-    val sets: List<DraftSet>
+    val sets: List<DraftSet>,
+    /**
+     * 그날 이 종목에 대해 적어둔 글. **루틴에는 안 담긴다**([toRoutineExercises]) —
+     * 완료 체크와 같은 이유로, 그날 있었던 일이지 다음에 할 계획이 아니다.
+     */
+    val memo: String = ""
 ) {
     /** 무게를 안 쓰는 종목은 자연히 0이 된다. 볼륨이라는 개념 자체가 없기 때문. */
     val volume: Double get() = sets.filter { it.done }.sumOf { it.weightKg * it.reps }
@@ -65,7 +70,8 @@ fun ExerciseWithSets.toDraft(): DraftExercise = DraftExercise(
     trackingType = exercise.trackingType,
     sets = sets.sortedBy { it.setIndex }.map {
         DraftSet(it.weightKg, it.reps, it.done, it.durationSec, it.distanceM)
-    }
+    },
+    memo = exercise.memo
 )
 
 /**
@@ -108,7 +114,8 @@ fun List<DraftExercise>.toPersistables(
         exerciseId = draft.exerciseId,
         exerciseName = draft.name,
         trackingType = draft.trackingType,
-        defaultSetting = draft.defaultSetting
+        defaultSetting = draft.defaultSetting,
+        memo = draft.memo
     )
     val sets = draft.sets.mapIndexed { setIndex, s ->
         WorkoutSet(

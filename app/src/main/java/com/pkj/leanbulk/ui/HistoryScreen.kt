@@ -93,6 +93,13 @@ private fun DayCard(date: String, dayMeals: List<MealEntry>, dayWorkouts: List<E
                     Text("기록 없음")
                 }
 
+                // 메모는 펼쳐야 보이므로, 접힌 상태에서도 있다는 것만 알려준다.
+                val memoCount = filled.count { it.memo.isNotBlank() } +
+                    dayWorkouts.count { it.exercise.memo.isNotBlank() }
+                if (memoCount > 0) {
+                    Text("메모 ${memoCount}개", style = MaterialTheme.typography.bodySmall)
+                }
+
                 Text(
                     if (expanded) "▲ 접기" else "▼ 자세히 보기",
                     style = MaterialTheme.typography.bodySmall,
@@ -145,6 +152,7 @@ private fun buildDayDetail(
                 appendLine("   $mark ${s.setIndex + 1}세트  $weight${s.reps}회")
             }
             appendLine("   → 총 ${item.totalReps}회 · 볼륨 ${item.volume.roundToInt()}kg")
+            if (item.exercise.memo.isNotBlank()) appendLine("   메모: ${item.exercise.memo}")
         }
         appendLine()
         appendLine("총 볼륨 ${workouts.sumOf { it.volume }.roundToInt()}kg")
@@ -165,6 +173,7 @@ private fun buildDayDetail(
                         "지방 ${num(m.macros.fat)}g · 당 ${num(m.macros.sugar)}g"
                 )
             }
+            if (m.memo.isNotBlank()) appendLine("   메모: ${m.memo}")
         }
 
         appendLine()

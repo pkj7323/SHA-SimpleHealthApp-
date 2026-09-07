@@ -317,6 +317,14 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
         scheduleWorkoutSave()
     }
 
+    /** 종목 메모를 고친다. 빈 글자를 주면 메모를 지우는 것이다. */
+    fun setExerciseMemo(exerciseIndex: Int, memo: String) {
+        _workoutDraft.value = _workoutDraft.value.mapIndexed { i, ex ->
+            if (i == exerciseIndex) ex.copy(memo = memo.trim()) else ex
+        }
+        scheduleWorkoutSave()
+    }
+
     fun updateSet(exerciseIndex: Int, setIndex: Int, transform: (DraftSet) -> DraftSet) {
         _workoutDraft.value = _workoutDraft.value.mapIndexed { i, ex ->
             if (i != exerciseIndex) ex
@@ -407,6 +415,16 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
     private fun updateMeal(index: Int, transform: (DraftMeal) -> DraftMeal) {
         _dietDraft.value = _dietDraft.value.mapIndexed { i, m -> if (i == index) transform(m) else m }
         scheduleDietSave()
+    }
+
+    /**
+     * 끼니 메모를 고친다. 빈 글자를 주면 메모를 지우는 것이다.
+     *
+     * 음식 줄과 달리 [DraftMeal.recomputeFromFoods]를 거치지 않는다 — 메모는 영양 합계의
+     * 재료가 아니라 그 옆에 따로 붙는 글이다.
+     */
+    fun setMealMemo(index: Int, memo: String) {
+        updateMeal(index) { it.copy(memo = memo.trim()) }
     }
 
     fun updateFood(food: FoodItem) {

@@ -280,7 +280,8 @@ object XlsxExporter {
         val ws = wb.newWorksheet("식단상세")
         ws.value(0, 0, "끼니별 식단 기록")
         ws.value(1, 0, "아무것도 안 담은 끼니는 넣지 않는다. 영양정보를 모르는 끼니는 빈 칸으로 둔다.")
-        val headers = listOf("날짜", "끼니", "메뉴", "칼로리", "단백질(g)", "탄수(g)", "지방(g)", "당(g)")
+        val headers =
+            listOf("날짜", "끼니", "메뉴", "칼로리", "단백질(g)", "탄수(g)", "지방(g)", "당(g)", "메모")
         headers.forEachIndexed { c, h -> ws.value(2, c, h) }
 
         var row = 3
@@ -295,6 +296,7 @@ object XlsxExporter {
                 m.macros.carbs?.let { ws.value(row, 5, it) }
                 m.macros.fat?.let { ws.value(row, 6, it) }
                 m.macros.sugar?.let { ws.value(row, 7, it) }
+                if (m.memo.isNotBlank()) ws.value(row, 8, m.memo)
                 row++
             }
     }

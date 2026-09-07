@@ -44,7 +44,9 @@ data class DraftMeal(
     val macros: Macros = Macros(),
     /** 이 매크로가 어디서 온 값인가. 비어 있으면 [MacroSource.NONE]. */
     val macroSource: MacroSource = MacroSource.NONE,
-    val foods: List<DraftMealFood> = emptyList()
+    val foods: List<DraftMealFood> = emptyList(),
+    /** 이 끼니에 적어둔 글. 음식 줄과 따로 놀아서 [recomputeFromFoods]가 건드리지 않는다. */
+    val memo: String = ""
 )
 
 /**
@@ -163,7 +165,8 @@ fun MealEntryWithFoods.toDraft(): DraftMeal {
         menuText = entry.menuText,
         macros = entry.macros,
         macroSource = entry.macroSource,
-        foods = draftFoods
+        foods = draftFoods,
+        memo = entry.memo
     )
 }
 
@@ -182,6 +185,7 @@ fun List<DraftMeal>.toMealEntryPairs(date: String): List<Pair<MealEntry, List<Me
             menuText = m.menuText,
             macros = m.macros,
             eaten = true,
+            memo = m.memo,
             macroSource = m.macroSource
         )
         val foods = m.foods.mapIndexed { foodIndex, f ->

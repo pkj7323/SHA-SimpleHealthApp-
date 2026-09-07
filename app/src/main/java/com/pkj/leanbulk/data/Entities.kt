@@ -67,6 +67,7 @@ data class MealEntry(
      * (담았으면 먹은 것). 옛 기록에는 `false`가 남아 있을 수 있어 컬럼은 그대로 둔다.
      */
     val eaten: Boolean,
+    /** 이 끼니에 사용자가 적어둔 글. 음식 줄과 달리 영양 합계에는 안 들어간다. */
     val memo: String = "",
     @ColumnInfo(defaultValue = "ENTERED") val macroSource: MacroSource = MacroSource.ENTERED
 )
@@ -202,7 +203,7 @@ data class MealFood(
  * 안 그러면 아무것도 안 먹은 칸이 "0kcal 끼니"로 세어진다.
  */
 val MealEntry.hasContent: Boolean
-    get() = menuText.isNotBlank() || !macros.isEmpty
+    get() = menuText.isNotBlank() || !macros.isEmpty || memo.isNotBlank()
 
 /** 끼니 + 그 안의 음식 줄들. */
 data class MealEntryWithFoods(
@@ -383,6 +384,12 @@ data class WorkoutExercise(
     @ColumnInfo(defaultValue = "WEIGHT_REPS")
     val trackingType: TrackingType = TrackingType.WEIGHT_REPS,
     val defaultSetting: String = "",
+    /**
+     * 그날 이 종목에 대해 적어둔 글("허리 조심", "다음엔 5kg 올리기").
+     *
+     * [RoutineExercise.defaultSetting](루틴의 기본 세팅)과 다르다 — 저건 "이렇게 할 것"이라
+     * 루틴을 불러올 때마다 따라오지만, 이건 **그날 있었던 일**이라 날짜에만 붙는다.
+     */
     val memo: String = ""
 )
 

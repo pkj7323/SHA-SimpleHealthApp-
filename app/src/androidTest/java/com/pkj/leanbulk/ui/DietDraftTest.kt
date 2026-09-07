@@ -4,6 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pkj.leanbulk.data.AmountUnit
 import com.pkj.leanbulk.data.MacroSource
 import com.pkj.leanbulk.data.Macros
+import com.pkj.leanbulk.data.hasContent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -138,5 +139,38 @@ class DietDraftTest {
         assertEquals(6, slots.size)
         assertEquals(listOf("끼니 1", "야식"), slots.drop(4).map { it.slotName })
         assertEquals("옛날 기록", slots[4].menuText)
+    }
+
+    /**
+     * 메모는 끼니와 함께 저장되고, 다시 읽으면 그대로 돌아온다.
+     *
+     * 음식 줄이 아니라 사람이 적은 글이라 [recomputeFromFoods]가 손대면 안 된다 —
+     * 음식을 하나 담을 때마다 메모가 지워지면 적어둘 이유가 없어진다.
+     */
+    @Test
+    fun 끼니_메모는_음식을_담아도_살아남고_그대로_저장된다() {
+        val meal = DraftMeal(slotName = "점심", memo = "밖에서 사 먹음")
+            .copy(foods = listOf(food("김밥", 800.0, 20.0, null, multiplier = 1.0)))
+            .recomputeFromFoods()
+
+        assertEquals("밖에서 사 먹음", meal.memo)
+
+        val (entry, _) = listOf(meal).toMealEntryPairs("2026-09-08").single()
+        assertEquals("밖에서 사 먹음", entry.memo)
+    }
+
+    /**
+     * 메모만 적어둔 끼니도 "담긴 끼니"다. 안 그러면 히스토리·엑셀이 빈 칸으로 보고 걸러내서
+     * 적어둔 글이 조용히 사라진다.
+     */
+    @Test
+    fun 메모만_있는_끼니도_기록으로_친다() {
+        val (memoOnly, _) = listOf(DraftMeal(slotName = "간식", memo = "속이 안 좋아 걸렀다"))
+            .toMealEntryPairs("2026-09-08").single()
+        val (blank, _) = listOf(DraftMeal(slotName = "간식"))
+            .toMealEntryPairs("2026-09-08").single()
+
+        assertTrue(memoOnly.hasContent)
+        assertTrue(!blank.hasContent)
     }
 }

@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
@@ -69,6 +70,7 @@ fun TodayDietScreen(vm: MainViewModel) {
     var foodPickerFor by remember { mutableStateOf<Int?>(null) }
     var presetPickerFor by remember { mutableStateOf<Int?>(null) }
     var savePresetFor by remember { mutableStateOf<Int?>(null) }
+    var memoFor by remember { mutableStateOf<Int?>(null) }
     val mealPresets by vm.mealPresets.collectAsState()
 
     val totals = remember(draft) { draft.totals() }
@@ -116,7 +118,8 @@ fun TodayDietScreen(vm: MainViewModel) {
                     onAddFood = { foodPickerFor = index },
                     onOpenPresets = { presetPickerFor = index },
                     onRemoveFood = { foodIndex -> vm.removeFoodFromMeal(index, foodIndex) },
-                    onMoveFood = { from, to -> vm.moveFoodInMeal(index, from, to) }
+                    onMoveFood = { from, to -> vm.moveFoodInMeal(index, from, to) },
+                    onEditMemo = { memoFor = index }
                 )
             }
 
@@ -175,6 +178,20 @@ fun TodayDietScreen(vm: MainViewModel) {
             onSaveCurrent = { savePresetFor = index; presetPickerFor = null },
             onDismiss = { presetPickerFor = null }
         )
+    }
+
+    memoFor?.let { index ->
+        val meal = draft.getOrNull(index)
+        if (meal == null) {
+            memoFor = null
+        } else {
+            MemoDialog(
+                title = "${meal.slotName} 메모",
+                initial = meal.memo,
+                onConfirm = { vm.setMealMemo(index, it); memoFor = null },
+                onDismiss = { memoFor = null }
+            )
+        }
     }
 
     savePresetFor?.let { index ->
@@ -238,13 +255,17 @@ private fun MealCard(
     onAddFood: () -> Unit,
     onOpenPresets: () -> Unit,
     onRemoveFood: (Int) -> Unit,
-    onMoveFood: (Int, Int) -> Unit
+    onMoveFood: (Int, Int) -> Unit,
+    onEditMemo: () -> Unit
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
 
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(meal.slotName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                IconButton(onClick = onEditMemo, modifier = Modifier.testTag("meal_memo_${meal.slotName}")) {
+                    Icon(Icons.Filled.EditNote, contentDescription = "메모")
+                }
                 onRemove?.let {
                     IconButton(onClick = it) {
                         Icon(Icons.Filled.Delete, contentDescription = "끼니 삭제")
@@ -296,6 +317,15 @@ private fun MealCard(
             ) {
                 OutlinedButton(onClick = onAddFood) { Text("음식 추가") }
                 OutlinedButton(onClick = onOpenPresets) { Text("내 식사") }
+            }
+
+            // 메모는 합계 아래가 아니라 위에 둔다 — 사람이 적은 글이 계산된 숫자보다 먼저 읽혀야 한다.
+            if (meal.memo.isNotBlank()) {
+                Text(
+                    "메모  ${meal.memo}",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
             }
 
             if (meal.foods.isNotEmpty()) {

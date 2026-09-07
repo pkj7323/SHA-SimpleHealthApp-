@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LinkOff
@@ -50,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -78,6 +80,7 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
     var pendingRoutine by remember { mutableStateOf<RoutineWithExercises?>(null) }
     // 저장하려는 이름이 기존 루틴과 겹쳐서 덮어쓸지 묻는 중인 대상.
     var duplicateName by remember { mutableStateOf<RoutineWithExercises?>(null) }
+    var memoFor by remember { mutableStateOf<Int?>(null) }
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -181,9 +184,24 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
                     onAddSet = { vm.addSet(exIndex) },
                     onRemoveSet = { vm.removeSet(exIndex) },
                     onRemoveExercise = { vm.removeExercise(exIndex) },
-                    onSetChange = { setIndex, transform -> vm.updateSet(exIndex, setIndex, transform) }
+                    onSetChange = { setIndex, transform -> vm.updateSet(exIndex, setIndex, transform) },
+                    onEditMemo = { memoFor = exIndex }
                 )
             }
+        }
+    }
+
+    memoFor?.let { index ->
+        val exercise = draft.getOrNull(index)
+        if (exercise == null) {
+            memoFor = null
+        } else {
+            MemoDialog(
+                title = "${exercise.name} 메모",
+                initial = exercise.memo,
+                onConfirm = { vm.setExerciseMemo(index, it); memoFor = null },
+                onDismiss = { memoFor = null }
+            )
         }
     }
 
@@ -304,7 +322,8 @@ private fun ExerciseCard(
     onAddSet: () -> Unit,
     onRemoveSet: () -> Unit,
     onRemoveExercise: () -> Unit,
-    onSetChange: (Int, (DraftSet) -> DraftSet) -> Unit
+    onSetChange: (Int, (DraftSet) -> DraftSet) -> Unit,
+    onEditMemo: () -> Unit
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
@@ -338,6 +357,14 @@ private fun ExerciseCard(
                 }
             }
 
+            if (exercise.memo.isNotBlank()) {
+                Text(
+                    "메모  ${exercise.memo}",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+
             SetColumnHeader(exercise.trackingType)
 
             exercise.sets.forEachIndexed { setIndex, set ->
@@ -361,6 +388,13 @@ private fun ExerciseCard(
                 OutlinedButton(onClick = onRemoveSet) {
                     Icon(Icons.Filled.Remove, contentDescription = "세트 삭제")
                     Text("세트")
+                }
+                // 머리 줄에는 이미 아이콘이 셋이라 여기 붙인다 — 더 넣으면 종목 이름 자리가 없어진다.
+                IconButton(
+                    onClick = onEditMemo,
+                    modifier = Modifier.size(40.dp).testTag("exercise_memo_${exercise.name}")
+                ) {
+                    Icon(Icons.Filled.EditNote, contentDescription = "메모")
                 }
                 Box(Modifier.weight(1f))
                 // 무게를 안 쓰는 종목은 볼륨이라는 개념이 없어서 0kg만 뜬다. 아예 감춘다.
