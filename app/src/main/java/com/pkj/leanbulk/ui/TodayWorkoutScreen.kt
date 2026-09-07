@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -42,6 +43,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -73,6 +75,18 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
     val exercises by vm.exercises.collectAsState()
     val today by vm.today.collectAsState()
     val routineSynced by vm.routineSynced.collectAsState()
+    val session by vm.workoutSession.collectAsState()
+    val restTimer by vm.restTimer.collectAsState()
+    val now by vm.now.collectAsState()
+    val restDone by vm.restDone.collectAsState()
+
+    val context = LocalContext.current
+    LaunchedEffect(restDone) {
+        if (restDone) {
+            vibrateRestDone(context)
+            vm.consumeRestDone()
+        }
+    }
 
     var showRoutinePicker by remember { mutableStateOf(false) }
     var showAddExercise by remember { mutableStateOf(false) }
@@ -100,6 +114,7 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
         }
     }
 
+    Box(Modifier.fillMaxSize()) {
     // 헤더까지 전부 한 LazyColumn 안에 넣어야 위로 같이 스크롤된다.
     LazyColumn(
         state = listState,
@@ -113,6 +128,15 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
                     totalVolume = draft.sumOf { it.volume },
                     savedAt = savedAt,
                     onDateChange = vm::setWorkoutDate
+                )
+
+                WorkoutTimerButton(
+                    session = session,
+                    nowEpochMs = now,
+                    isToday = date == today,
+                    onStart = vm::startWorkout,
+                    onEnd = vm::endWorkout,
+                    modifier = Modifier.padding(top = 8.dp)
                 )
 
                 Row(
@@ -189,6 +213,20 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
                 )
             }
         }
+
+        // 휴식 창이 마지막 카드를 가리지 않도록 아래를 비워둔다.
+        item { Box(Modifier.padding(bottom = 96.dp)) }
+    }
+
+    RestTimerOverlay(
+        timer = restTimer,
+        nowEpochMs = now,
+        onAdjust = vm::adjustRest,
+        onSkip = vm::skipRest,
+        onExpandedChange = vm::setRestExpanded,
+        expandedModifier = Modifier.align(Alignment.BottomCenter),
+        collapsedModifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+    )
     }
 
     memoFor?.let { index ->

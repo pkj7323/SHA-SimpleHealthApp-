@@ -96,7 +96,16 @@ data class MealFoodDto(
 @Serializable
 data class WorkoutDayDto(
     val date: String,
-    val exercises: List<WorkoutExerciseDto> = emptyList()
+    val exercises: List<WorkoutExerciseDto> = emptyList(),
+    /**
+     * 운동을 시작·종료한 시각(epoch ms). 타이머가 생기기 전 백업엔 없으므로 null이다 —
+     * 그때 기록에는 시작 시각이라는 개념 자체가 없었으니 지어내지 않는다.
+     *
+     * 벽시계 시각을 그대로 담는 이유는 이게 "몇 시에 운동했나"라는 사실이기 때문이다.
+     * 시간대가 다른 기기에서 열어도 그날 기록으로 남아야 하므로 날짜([date])와 함께 읽는다.
+     */
+    val startedAt: Long? = null,
+    val endedAt: Long? = null
 )
 
 /**

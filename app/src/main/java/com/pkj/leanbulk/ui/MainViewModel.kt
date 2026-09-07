@@ -17,6 +17,7 @@ import com.pkj.leanbulk.data.Repository
 import com.pkj.leanbulk.data.RoutineWithExercises
 import com.pkj.leanbulk.data.SeedData
 import com.pkj.leanbulk.data.TrackingType
+import com.pkj.leanbulk.data.WorkoutSession
 import com.pkj.leanbulk.data.backup.DietTemplateDto
 import com.pkj.leanbulk.data.backup.ExerciseDto
 import com.pkj.leanbulk.data.backup.FoodDto
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.stateIn
@@ -84,6 +86,41 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
     private val _workoutDraft = MutableStateFlow<List<DraftExercise>>(emptyList())
     val workoutDraft: StateFlow<List<DraftExercise>> = _workoutDraft
 
+    /** 보고 있는 날짜의 운동 시작·종료 기록. 없으면 아직 시작 안 한 날이다. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val workoutSession: StateFlow<WorkoutSession?> = _workoutDate
+        .flatMapLatest { repository.observeWorkoutSession(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    private val _restTimer = MutableStateFlow<RestTimer?>(null)
+    val restTimer: StateFlow<RestTimer?> = _restTimer
+
+    /** 다음 휴식의 길이(초). −/+로 고친 값이 여기 남아 다음 세트에 그대로 쓰인다. */
+    private val _restSeconds = MutableStateFlow(com.pkj.leanbulk.data.DEFAULT_REST_SECONDS)
+    val restSeconds: StateFlow<Int> = _restSeconds
+
+    /**
+     * 매초 갱신되는 "지금". 경과 시간과 남은 시간은 이 값과 저장된 시각의 차이로 매번
+     * 계산한다 — 남은 초를 세어 내려가면 앱이 뒤로 가 있는 동안 시간이 멈춘다.
+     */
+    private val _now = MutableStateFlow(System.currentTimeMillis())
+    val now: StateFlow<Long> = _now
+
+    /** 휴식이 막 끝났다는 신호. 화면이 받아서 진동을 울리고 [consumeRestDone]으로 지운다. */
+    private val _restDone = MutableStateFlow(false)
+    val restDone: StateFlow<Boolean> = _restDone
+
+    /**
+     * 시계를 계속 세야 하는지.
+     *
+     * [workoutSession]을 그대로 보지 않고 따로 들고 있는 이유는 **Room 흐름이 한 박자 늦기
+     * 때문이다.** 시작을 누른 직후엔 아직 옛 값(없음)이 흐르고 있어서, 그걸 보고 판단하면
+     * 시계가 첫 틱에 곧바로 멈춘다.
+     */
+    private val workoutRunning = MutableStateFlow(false)
+
+    private var tickerJob: Job? = null
+
     // ===================== 식단 =====================
 
     private val _dietDate = MutableStateFlow(_today.value)
@@ -100,6 +137,11 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
 
     val allWorkouts: StateFlow<List<ExerciseWithSets>> =
         repository.observeAllWorkouts().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** 히스토리에서 그날 운동을 얼마나 했는지 같이 보여주려고 전부 들고 있는다. */
+    val allWorkoutSessions: StateFlow<List<WorkoutSession>> =
+        repository.observeAllWorkoutSessions()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val bodyRecords: StateFlow<List<BodyRecord>> =
         repository.observeBodyRecords().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -121,8 +163,12 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
         repository.observeTarget().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     init {
-        viewModelScope.launch { repository.applySeeds() }
+        viewModelScope.launch {
+            repository.applySeeds()
+            _restSeconds.value = repository.restSeconds()
+        }
         loadWorkoutDraft(_today.value)
+        resumeTickerIfRunning()
         loadDietDraft(_today.value)
         startMidnightWatcher()
     }
@@ -143,6 +189,9 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
 
     /** 앱이 백그라운드에서 돌아왔을 때도 호출된다. 날짜가 바뀌었으면 오늘 기준을 옮긴다. */
     fun refreshToday() {
+        // 뒤에 있는 동안 시계가 멈춰 있었을 수 있다. 돌고 있던 운동이면 다시 세게 한다.
+        resumeTickerIfRunning()
+
         val current = LocalDate.now().format(DATE_FMT)
         if (current == _today.value) return
         _today.value = current
@@ -166,6 +215,17 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
             flushWorkoutSave() // 날짜를 옮기기 전에 편집 중이던 내용을 먼저 확정 저장한다.
             _workoutDate.value = date
             loadWorkoutDraft(date)
+            // 다른 날로 옮기면 그날 휴식은 남의 얘기다. 그 날짜가 돌고 있으면 시계만 잇는다.
+            _restTimer.value = null
+            resumeTickerIfRunning()
+        }
+    }
+
+    /** 앱을 다시 켰을 때 돌고 있던 운동 시계를 이어서 세게 한다. */
+    private fun resumeTickerIfRunning() {
+        viewModelScope.launch {
+            workoutRunning.value = repository.workoutSession(_workoutDate.value)?.running == true
+            if (workoutRunning.value) ensureTicker()
         }
     }
 
@@ -326,11 +386,124 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
     }
 
     fun updateSet(exerciseIndex: Int, setIndex: Int, transform: (DraftSet) -> DraftSet) {
+        val before = _workoutDraft.value.getOrNull(exerciseIndex)?.sets?.getOrNull(setIndex)
         _workoutDraft.value = _workoutDraft.value.mapIndexed { i, ex ->
             if (i != exerciseIndex) ex
             else ex.copy(sets = ex.sets.mapIndexed { j, s -> if (j == setIndex) transform(s) else s })
         }
         scheduleWorkoutSave()
+
+        // 세트를 막 끝냈을 때만 휴식을 건다. 체크를 푸는 것(잘못 눌렀을 때)이나 무게·횟수를
+        // 고치는 것으로 타이머가 도로 켜지면 안 된다.
+        val after = _workoutDraft.value.getOrNull(exerciseIndex)?.sets?.getOrNull(setIndex)
+        if (before != null && after != null && !before.done && after.done) {
+            startRest(_workoutDraft.value[exerciseIndex].name)
+        }
+    }
+
+    // ---------- 운동 시간 ----------
+
+    /**
+     * 운동을 시작한다. 이미 끝낸 날에 다시 누르면 **시작 시각은 그대로 두고 끝 표시만 뗀다** —
+     * 몇 시에 시작했는지는 기록이라 다시 쓰지 않는다.
+     */
+    fun startWorkout() {
+        val date = _workoutDate.value
+        viewModelScope.launch {
+            val existing = repository.workoutSession(date)
+            repository.saveWorkoutSession(
+                WorkoutSession(
+                    date = date,
+                    startedAtEpochMs = existing?.startedAtEpochMs ?: System.currentTimeMillis(),
+                    endedAtEpochMs = null
+                )
+            )
+            workoutRunning.value = true
+            ensureTicker()
+        }
+    }
+
+    /** 운동을 끝낸다. 돌고 있던 휴식도 같이 접는다 — 끝냈는데 쉬라고 세고 있을 이유가 없다. */
+    fun endWorkout() {
+        val date = _workoutDate.value
+        viewModelScope.launch {
+            val existing = repository.workoutSession(date) ?: return@launch
+            repository.saveWorkoutSession(existing.copy(endedAtEpochMs = System.currentTimeMillis()))
+            workoutRunning.value = false
+            _restTimer.value = null
+        }
+    }
+
+    // ---------- 휴식 타이머 ----------
+
+    private fun startRest(exerciseName: String) {
+        val seconds = _restSeconds.value
+        _restTimer.value = RestTimer(
+            exerciseName = exerciseName,
+            endsAtEpochMs = System.currentTimeMillis() + seconds * 1000L,
+            totalSec = seconds
+        )
+        ensureTicker()
+    }
+
+    /**
+     * 도는 중인 타이머를 [deltaSec]만큼 늘리거나 줄인다. 고친 길이는 [restSeconds]에도
+     * 남아 다음 세트부터 그대로 쓰인다 — 매번 같은 만큼 더 쉬는데 매번 눌러야 하면 안 된다.
+     *
+     * 0초 밑으로는 안 내려간다. 마이너스 휴식은 뜻이 없고, 줄여서 0이 되면 그건 건너뛴 것이다.
+     */
+    fun adjustRest(deltaSec: Int) {
+        val timer = _restTimer.value ?: return
+        val remaining = ((timer.endsAtEpochMs - System.currentTimeMillis()) / 1000.0).toInt()
+        val newRemaining = (remaining + deltaSec).coerceAtLeast(0)
+        _restSeconds.value = (_restSeconds.value + deltaSec).coerceAtLeast(REST_STEP_SEC)
+        viewModelScope.launch { repository.setRestSeconds(_restSeconds.value) }
+
+        if (newRemaining == 0) {
+            skipRest()
+            return
+        }
+        _restTimer.value = timer.copy(
+            endsAtEpochMs = System.currentTimeMillis() + newRemaining * 1000L,
+            totalSec = maxOf(timer.totalSec, newRemaining)
+        )
+    }
+
+    /** 휴식을 그만둔다. 다 쉬었든 안 쉬었든 화면에서 치우는 건 같은 일이다. */
+    fun skipRest() {
+        _restTimer.value = null
+    }
+
+    /** 창을 내려도 타이머는 계속 돈다 — 접는 건 보기 싫다는 뜻이지 그만두겠다는 뜻이 아니다. */
+    fun setRestExpanded(expanded: Boolean) {
+        _restTimer.value = _restTimer.value?.copy(expanded = expanded)
+    }
+
+    fun consumeRestDone() {
+        _restDone.value = false
+    }
+
+    /**
+     * 매초 [now]를 갱신하는 코루틴. **셀 게 있을 때만 돈다** — 운동도 안 하고 쉬지도 않는데
+     * 1초마다 화면을 다시 그리면 배터리만 먹는다.
+     */
+    private fun ensureTicker() {
+        if (tickerJob?.isActive == true) return
+        tickerJob = viewModelScope.launch {
+            while (true) {
+                val nowMs = System.currentTimeMillis()
+                _now.value = nowMs
+
+                val timer = _restTimer.value
+                if (timer != null && nowMs >= timer.endsAtEpochMs) {
+                    _restTimer.value = null
+                    _restDone.value = true
+                }
+
+                if (_restTimer.value == null && !workoutRunning.value) break
+                delay(1000)
+            }
+        }
     }
 
     /**

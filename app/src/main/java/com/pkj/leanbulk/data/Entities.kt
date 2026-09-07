@@ -308,7 +308,14 @@ data class DietTarget(
 @Entity(tableName = "app_meta")
 data class AppMeta(
     @PrimaryKey val id: Int = 1,
-    val seedVersion: Int = 0
+    val seedVersion: Int = 0,
+    /**
+     * 세트를 체크했을 때 띄우는 휴식 타이머의 길이(초).
+     *
+     * 타이머에서 −/+로 고치면 그 값이 다음 세트의 기본이 된다. 사람마다, 종목마다 쉬는
+     * 시간이 다른데 앱을 켤 때마다 90초로 돌아가면 매번 다시 맞춰야 한다.
+     */
+    @ColumnInfo(defaultValue = "90") val restSeconds: Int = 90
 )
 
 /**
@@ -355,6 +362,37 @@ data class Exercise(
     val trackingType: TrackingType,
     val source: ItemSource
 )
+
+/**
+ * 하루 운동을 언제 시작해서 언제 끝냈는지. 날짜 하나에 한 줄.
+ *
+ * 종목([WorkoutExercise])이 아니라 따로 두는 이유는 종목을 지웠다 다시 담아도
+ * "몇 시에 시작해서 얼마나 했는지"는 그대로여야 하기 때문이다.
+ *
+ * **경과 시간은 저장하지 않는다.** 시작 시각과 지금(끝냈으면 [endedAtEpochMs])의 차이로
+ * 매번 계산한다. 숫자로 굳혀두면 앱이 뒤로 가 있는 동안 시간이 멈춘다.
+ */
+@Entity(tableName = "workout_session")
+data class WorkoutSession(
+    @PrimaryKey val date: String,
+    val startedAtEpochMs: Long,
+    /** 아직 안 끝냈으면 null. 끝낸 뒤 다시 시작하면 다시 null이 된다. */
+    val endedAtEpochMs: Long? = null
+) {
+    val running: Boolean get() = endedAtEpochMs == null
+
+    /** [nowEpochMs] 기준 경과 시간(밀리초). 끝난 운동은 끝난 시각까지만 센다. */
+    fun elapsedMs(nowEpochMs: Long): Long =
+        ((endedAtEpochMs ?: nowEpochMs) - startedAtEpochMs).coerceAtLeast(0)
+
+    /**
+     * 끝낸 운동의 총 시간(밀리초). 아직 도는 중이면 null이다.
+     *
+     * "지금까지 몇 분"과 "그날 몇 분 했다"는 다른 질문이다. 지난 기록을 훑는 화면에서
+     * 볼 때마다 늘어나는 숫자를 기록처럼 보여주면 안 되므로 여기서 갈라둔다.
+     */
+    val finishedMs: Long? get() = endedAtEpochMs?.let { (it - startedAtEpochMs).coerceAtLeast(0) }
+}
 
 /** 하루 운동에 포함된 종목 하나. 세트는 workout_set 테이블에 따로 저장된다. */
 @Entity(

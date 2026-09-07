@@ -17,6 +17,7 @@ import com.pkj.leanbulk.data.Routine
 import com.pkj.leanbulk.data.RoutineExercise
 import com.pkj.leanbulk.data.RoutineSet
 import com.pkj.leanbulk.data.WorkoutExercise
+import com.pkj.leanbulk.data.WorkoutSession
 import com.pkj.leanbulk.data.WorkoutSet
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -75,7 +76,8 @@ class SnapshotCompletenessTest {
             "id", "presetId", "orderIndex", "foodId", "name", "multiplier", "amount", "amountUnit",
             "macros", "macroSource"
         )
-        assertFields<AppMeta>("id", "seedVersion")
+        assertFields<AppMeta>("id", "seedVersion", "restSeconds")
+        assertFields<WorkoutSession>("date", "startedAtEpochMs", "endedAtEpochMs")
         assertFields<Exercise>(
             "id", "slug", "name", "bodyPart", "equipment", "trackingType", "source"
         )

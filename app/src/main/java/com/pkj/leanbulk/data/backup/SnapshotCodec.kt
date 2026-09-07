@@ -25,6 +25,7 @@ import com.pkj.leanbulk.data.RoutineSet
 import com.pkj.leanbulk.data.RoutineWithExercises
 import com.pkj.leanbulk.data.SeedData
 import com.pkj.leanbulk.data.WorkoutExercise
+import com.pkj.leanbulk.data.WorkoutSession
 import com.pkj.leanbulk.data.WorkoutSet
 import kotlinx.serialization.json.Json
 import java.io.ByteArrayOutputStream
@@ -105,12 +106,21 @@ object SnapshotCodec {
      * [slugById]는 카탈로그의 로컬 id를 slug로 바꾸기 위한 표다. id를 그대로 실으면
      * 다른 기기에서 엉뚱한 종목을 가리키게 된다.
      */
-    fun List<ExerciseWithSets>.toWorkoutDayDtos(slugById: Map<Long, String>): List<WorkoutDayDto> =
-        groupBy { it.exercise.date }
-            .toSortedMap()
-            .map { (date, list) ->
+    fun List<ExerciseWithSets>.toWorkoutDayDtos(
+        slugById: Map<Long, String>,
+        sessions: Map<String, WorkoutSession> = emptyMap()
+    ): List<WorkoutDayDto> {
+        val byDate = groupBy { it.exercise.date }
+        // 시작 시각만 있고 종목은 안 담은 날도 있다(운동을 켜두고 아무것도 안 적은 날).
+        // 종목 쪽 날짜만 훑으면 그런 날이 백업에서 통째로 빠진다.
+        return (byDate.keys + sessions.keys).sorted()
+            .map { date ->
+                val list = byDate[date].orEmpty()
+                val session = sessions[date]
                 WorkoutDayDto(
                     date = date,
+                    startedAt = session?.startedAtEpochMs,
+                    endedAt = session?.endedAtEpochMs,
                     exercises = list.sortedBy { it.exercise.orderIndex }.map { ews ->
                         WorkoutExerciseDto(
                             routineName = ews.exercise.routineName,
@@ -129,6 +139,12 @@ object SnapshotCodec {
                     }
                 )
             }
+    }
+
+    /** 시작 시각이 실려 있는 날만 세션 한 줄이 된다. 없으면 그날은 타이머를 안 쓴 것이다. */
+    fun WorkoutDayDto.toSession(): WorkoutSession? = startedAt?.let {
+        WorkoutSession(date = date, startedAtEpochMs = it, endedAtEpochMs = endedAt)
+    }
 
     fun RoutineWithExercises.toDto(slugById: Map<Long, String>) = RoutineDto(
         name = routine.name,

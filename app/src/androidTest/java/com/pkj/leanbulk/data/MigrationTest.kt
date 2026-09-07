@@ -349,6 +349,40 @@ class MigrationTest {
             }
     }
 
+    /**
+     * 운동 시작·종료 자리와 휴식 길이가 생긴다. 둘 다 새 값이라 옮겨 담을 옛 데이터가 없고,
+     * **기존 기록이 다치지 않는지**가 확인할 전부다.
+     */
+    @Test
+    fun 운동_세션_테이블이_생겨도_기존_기록은_그대로다() {
+        helper.createDatabase(TEST_DB, 15).use { db ->
+            db.execSQL(
+                "INSERT INTO workout_exercise (id, date, routineName, orderIndex, exerciseName, " +
+                    "trackingType, defaultSetting, memo) " +
+                    "VALUES (1, '2026-09-01', '가슴', 0, '벤치프레스', 'WEIGHT_REPS', '5x5', '')"
+            )
+            db.execSQL("INSERT INTO app_meta (id, seedVersion) VALUES (1, 3)")
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, AppDatabase.VERSION, true, *AppDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT exerciseName FROM workout_exercise").use { c ->
+                    assertTrue("기존 운동 기록이 사라졌다", c.moveToFirst())
+                    assertEquals("벤치프레스", c.getString(0))
+                }
+                db.query("SELECT seedVersion, restSeconds FROM app_meta WHERE id = 1").use { c ->
+                    assertTrue(c.moveToFirst())
+                    assertEquals("시드 버전이 초기화됐다", 3, c.getInt(0))
+                    assertEquals("휴식 기본값이 안 채워졌다", 90, c.getInt(1))
+                }
+                // 시작 시각이 없는 날은 세션 줄도 없다 — 없던 사실을 지어내지 않는다.
+                db.query("SELECT COUNT(*) FROM workout_session").use { c ->
+                    assertTrue(c.moveToFirst())
+                    assertEquals(0, c.getInt(0))
+                }
+            }
+    }
+
     @Test
     fun 선언한_버전과_실제_DB_버전이_같다() {
         val db = helper.createDatabase(TEST_DB, AppDatabase.VERSION)

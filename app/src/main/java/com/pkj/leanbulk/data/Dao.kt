@@ -339,6 +339,9 @@ interface AppMetaDao {
     @Query("SELECT seedVersion FROM app_meta WHERE id = 1")
     suspend fun seedVersion(): Int?
 
+    @Query("SELECT restSeconds FROM app_meta WHERE id = 1")
+    suspend fun restSeconds(): Int?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(meta: AppMeta)
 }
@@ -374,6 +377,25 @@ interface WorkoutDao {
 
     @Insert
     suspend fun insertSets(sets: List<WorkoutSet>)
+
+    @Query("SELECT * FROM workout_session WHERE date = :date")
+    fun observeSession(date: String): Flow<WorkoutSession?>
+
+    @Query("SELECT * FROM workout_session")
+    fun observeAllSessions(): Flow<List<WorkoutSession>>
+
+    @Query("SELECT * FROM workout_session WHERE date = :date")
+    suspend fun session(date: String): WorkoutSession?
+
+    /** 백업 내보내기용 일회성 조회. */
+    @Query("SELECT * FROM workout_session")
+    suspend fun allSessions(): List<WorkoutSession>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSession(session: WorkoutSession)
+
+    @Query("DELETE FROM workout_session")
+    suspend fun deleteAllSessions()
 
     /** 해당 날짜의 기존 기록을 지우고 새로 저장한다(덮어쓰기). */
     @Transaction

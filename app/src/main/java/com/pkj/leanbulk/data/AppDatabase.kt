@@ -320,10 +320,26 @@ internal val MIGRATION_14_15 = Migration(14, 15) { db ->
     db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_food_item_slug` ON `food_item` (`slug`)")
 }
 
+/**
+ * 운동 시작·종료 시각을 담을 자리와, 휴식 타이머의 기본 길이.
+ *
+ * 둘 다 새로 생기는 값이라 옮겨 담을 옛 데이터가 없다 — 테이블 하나를 만들고 컬럼 하나를
+ * 붙이면 끝이다. `app_meta`는 항상 한 줄뿐이라 기본값 90이 그대로 그 줄의 값이 된다.
+ */
+internal val MIGRATION_15_16 = Migration(15, 16) { db ->
+    db.execSQL(
+        "CREATE TABLE IF NOT EXISTS `workout_session` (" +
+            "`date` TEXT NOT NULL, `startedAtEpochMs` INTEGER NOT NULL, " +
+            "`endedAtEpochMs` INTEGER, PRIMARY KEY(`date`))"
+    )
+    db.execSQL("ALTER TABLE `app_meta` ADD COLUMN `restSeconds` INTEGER NOT NULL DEFAULT 90")
+}
+
 @Database(
     entities = [
         MealEntry::class,
         WorkoutExercise::class,
+        WorkoutSession::class,
         WorkoutSet::class,
         Routine::class,
         RoutineExercise::class,
@@ -339,7 +355,7 @@ internal val MIGRATION_14_15 = Migration(14, 15) { db ->
         AppMeta::class,
         Exercise::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -370,11 +386,12 @@ abstract class AppDatabase : RoomDatabase() {
          */
         internal val MIGRATIONS = arrayOf(
             MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
-            MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15
+            MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14,
+            MIGRATION_14_15, MIGRATION_15_16
         )
 
         /** 마이그레이션 테스트가 참조한다. `@Database`의 version과 항상 같아야 한다. */
-        internal const val VERSION = 15
+        internal const val VERSION = 16
 
         fun get(context: Context): AppDatabase =
             instance ?: synchronized(this) {

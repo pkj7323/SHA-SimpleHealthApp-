@@ -11,8 +11,15 @@ import com.pkj.leanbulk.data.backup.SnapshotCodec.toDto
 import com.pkj.leanbulk.data.backup.SnapshotCodec.toEntity
 import com.pkj.leanbulk.data.backup.SnapshotCodec.toEntityPair
 import com.pkj.leanbulk.data.backup.SnapshotCodec.toEntityPairs
+import com.pkj.leanbulk.data.backup.SnapshotCodec.toSession
 import com.pkj.leanbulk.data.backup.SnapshotCodec.toWorkoutDayDtos
 import kotlinx.coroutines.flow.Flow
+
+/**
+ * 휴식 타이머의 기본 길이. 아직 한 번도 안 고쳤을 때 쓴다.
+ * 90초는 근비대 루틴에서 흔히 쓰는 값이라 첫 값으로 무난하다.
+ */
+const val DEFAULT_REST_SECONDS = 90
 
 class Repository(private val db: AppDatabase) {
 
@@ -79,7 +86,7 @@ class Repository(private val db: AppDatabase) {
             SeedData.foodCatalog.forEach { foodDao.upsertSeed(it.toEntity()) }
         }
 
-        appMetaDao.upsert(AppMeta(seedVersion = SeedData.VERSION))
+        appMetaDao.upsert(AppMeta(seedVersion = SeedData.VERSION, restSeconds = restSeconds()))
     }
 
     suspend fun seedVersion(): Int = appMetaDao.seedVersion() ?: 0
@@ -235,6 +242,21 @@ class Repository(private val db: AppDatabase) {
     suspend fun saveWorkoutDay(date: String, exercises: List<Pair<WorkoutExercise, List<WorkoutSet>>>) =
         workoutDao.replaceDay(date, exercises)
 
+    fun observeWorkoutSession(date: String): Flow<WorkoutSession?> = workoutDao.observeSession(date)
+
+    fun observeAllWorkoutSessions(): Flow<List<WorkoutSession>> = workoutDao.observeAllSessions()
+
+    suspend fun workoutSession(date: String): WorkoutSession? = workoutDao.session(date)
+
+    suspend fun saveWorkoutSession(session: WorkoutSession) = workoutDao.upsertSession(session)
+
+    /** 휴식 타이머의 기본 길이(초). 사용자가 −/+로 고친 값이 다음 세트의 기본이 된다. */
+    suspend fun restSeconds(): Int = appMetaDao.restSeconds() ?: DEFAULT_REST_SECONDS
+
+    suspend fun setRestSeconds(seconds: Int) {
+        appMetaDao.upsert(AppMeta(seedVersion = seedVersion(), restSeconds = seconds))
+    }
+
     // ---------- 루틴 ----------
 
     fun observeRoutines(): Flow<List<RoutineWithExercises>> = routineDao.observeAll()
@@ -337,7 +359,8 @@ class Repository(private val db: AppDatabase) {
             seedVersion = seedVersion(),
             exercises = catalog.map { it.toDto() },
             meals = mealDao.getAllWithFoods().map { it.toDto(foodSlugById) },
-            workoutDays = workoutDao.getAll().toWorkoutDayDtos(slugById),
+            workoutDays = workoutDao.getAll()
+                .toWorkoutDayDtos(slugById, workoutDao.allSessions().associateBy { it.date }),
             routines = routineDao.getAll().map { it.toDto(slugById) },
             dietTemplates = dietTemplateDao.getAll().map { it.toDto() },
             foods = foodDao.getAll().map { it.toDto() },
@@ -357,6 +380,7 @@ class Repository(private val db: AppDatabase) {
     suspend fun importSnapshot(snapshot: Snapshot) = db.withTransaction {
         mealDao.deleteAll()
         workoutDao.deleteAll()
+        workoutDao.deleteAllSessions()
         routineDao.deleteAll()
         dietTemplateDao.deleteAll()
         foodDao.deleteAll()
@@ -382,6 +406,7 @@ class Repository(private val db: AppDatabase) {
 
         snapshot.workoutDays.forEach { day ->
             workoutDao.replaceDay(day.date, day.toEntityPairs(idBySlug))
+            day.toSession()?.let { workoutDao.upsertSession(it) }
         }
 
         snapshot.routines.forEach { dto ->
@@ -406,7 +431,8 @@ class Repository(private val db: AppDatabase) {
         }
 
         // 시드 버전도 같이 넘어와야, 옛 백업을 불러왔을 때 다음 실행에서 밀린 시드가 채워진다.
-        appMetaDao.upsert(AppMeta(seedVersion = snapshot.seedVersion))
+        // 휴식 길이는 백업에 없다 — 기기에서 손에 익힌 값이지 기록이 아니라서 그대로 둔다.
+        appMetaDao.upsert(AppMeta(seedVersion = snapshot.seedVersion, restSeconds = restSeconds()))
     }
 
     /** 선택적 병합 결과. 뭐가 몇 개 들어왔는지 알려주려고 센다. */

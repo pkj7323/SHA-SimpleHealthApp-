@@ -23,6 +23,7 @@ import com.pkj.leanbulk.data.Routine
 import com.pkj.leanbulk.data.RoutineExercise
 import com.pkj.leanbulk.data.RoutineSet
 import com.pkj.leanbulk.data.WorkoutExercise
+import com.pkj.leanbulk.data.WorkoutSession
 import com.pkj.leanbulk.data.WorkoutSet
 import com.pkj.leanbulk.data.backup.BackupFiles
 import com.pkj.leanbulk.data.backup.SnapshotCodec
@@ -185,6 +186,26 @@ class SnapshotRoundTripTest {
     }
 
     /** 왕복에서 깨지기 쉬운 값들을 골고루 심는다. */
+    /**
+     * 운동 시간이 왕복에서 살아남는지. 끝낸 날과 아직 안 끝낸 날을 갈라서 본다 —
+     * `endedAt`이 null인 걸 0으로 읽어버리면 "0초 만에 끝낸 운동"이 된다.
+     */
+    @Test
+    fun 운동_시작_종료_시각이_왕복한다() = runBlocking {
+        seedTrickyData()
+        repo.importSnapshot(SnapshotCodec.fromJson(SnapshotCodec.toJson(repo.exportSnapshot(fixedTime))))
+
+        val ended = requireNotNull(db.workoutDao().session("2026-08-30"))
+        assertEquals(1_756_500_000_000, ended.startedAtEpochMs)
+        assertEquals(1_756_504_200_000, ended.endedAtEpochMs)
+
+        val running = requireNotNull(db.workoutDao().session("2026-08-31"))
+        assertNull("안 끝낸 운동에 끝난 시각이 생겼다", running.endedAtEpochMs)
+
+        // 시작조차 안 한 날은 세션이 없어야 한다 — 없던 사실을 만들지 않는다.
+        assertNull(db.workoutDao().session("2026-09-01"))
+    }
+
     private suspend fun seedTrickyData() {
         // 카탈로그를 먼저 넣어야 기록이 slug로 이어 붙는다.
         val plankId = db.exerciseDao().insert(
@@ -267,6 +288,15 @@ class SnapshotRoundTripTest {
                     )
                 )
             )
+        )
+
+        // 운동 시간. 종목이 있는 날 하나(끝낸 것)와 종목 없이 시작만 한 날 하나 —
+        // 뒤엣것은 종목 쪽 날짜만 훑으면 백업에서 통째로 빠진다.
+        db.workoutDao().upsertSession(
+            WorkoutSession("2026-08-30", startedAtEpochMs = 1_756_500_000_000, endedAtEpochMs = 1_756_504_200_000)
+        )
+        db.workoutDao().upsertSession(
+            WorkoutSession("2026-08-31", startedAtEpochMs = 1_756_600_000_000)
         )
 
         // orderIndex에 일부러 구멍을 낸다. 불러올 때 0,1,2로 다시 매겨지면 이 테스트가 잡아낸다.

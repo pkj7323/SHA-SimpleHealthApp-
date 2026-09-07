@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.pkj.leanbulk.data.ExerciseWithSets
 import com.pkj.leanbulk.data.MealEntry
+import com.pkj.leanbulk.data.WorkoutSession
 import com.pkj.leanbulk.data.hasContent
 import kotlin.math.roundToInt
 
@@ -34,25 +35,33 @@ import kotlin.math.roundToInt
 fun HistoryScreen(vm: MainViewModel) {
     val meals by vm.allMeals.collectAsState()
     val workouts by vm.allWorkouts.collectAsState()
+    val sessions by vm.allWorkoutSessions.collectAsState()
 
     // 날짜별로 한 번만 묶어둔다. 매 항목마다 전체 목록을 다시 훑으면 기록이 쌓일수록 느려진다.
-    val days = remember(meals, workouts) {
+    val days = remember(meals, workouts, sessions) {
         val mealsByDate = meals.groupBy { it.date }
         val workoutsByDate = workouts.groupBy { it.exercise.date }
+        val sessionsByDate = sessions.associateBy { it.date }
         (mealsByDate.keys + workoutsByDate.keys)
             .sortedDescending()
             .map { date ->
                 DayRecord(
                     date = date,
                     meals = mealsByDate[date].orEmpty(),
-                    workouts = workoutsByDate[date].orEmpty()
+                    workouts = workoutsByDate[date].orEmpty(),
+                    session = sessionsByDate[date]
                 )
             }
     }
 
     LazyColumn(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         items(days, key = { it.date }) { day ->
-            DayCard(date = day.date, dayMeals = day.meals, dayWorkouts = day.workouts)
+            DayCard(
+                date = day.date,
+                dayMeals = day.meals,
+                dayWorkouts = day.workouts,
+                session = day.session
+            )
         }
     }
 }
@@ -60,11 +69,17 @@ fun HistoryScreen(vm: MainViewModel) {
 private data class DayRecord(
     val date: String,
     val meals: List<MealEntry>,
-    val workouts: List<ExerciseWithSets>
+    val workouts: List<ExerciseWithSets>,
+    val session: WorkoutSession?
 )
 
 @Composable
-private fun DayCard(date: String, dayMeals: List<MealEntry>, dayWorkouts: List<ExerciseWithSets>) {
+private fun DayCard(
+    date: String,
+    dayMeals: List<MealEntry>,
+    dayWorkouts: List<ExerciseWithSets>,
+    session: WorkoutSession?
+) {
     var expanded by remember { mutableStateOf(false) }
 
     Card(Modifier.fillMaxWidth()) {
@@ -89,6 +104,10 @@ private fun DayCard(date: String, dayMeals: List<MealEntry>, dayWorkouts: List<E
                     val routine = dayWorkouts.first().exercise.routineName.ifBlank { "운동" }
                     Text("$routine · 총 볼륨 ${dayWorkouts.sumOf { it.volume }.roundToInt()}kg (${dayWorkouts.size}종목)")
                 }
+                // 아직 안 끝낸 운동은 시간을 안 적는다(`finishedMs`가 null).
+                session?.finishedMs?.let {
+                    Text("운동 시간 ${formatClock(it / 1000)}", style = MaterialTheme.typography.bodySmall)
+                }
                 if (filled.isEmpty() && dayWorkouts.isEmpty()) {
                     Text("기록 없음")
                 }
@@ -111,7 +130,9 @@ private fun DayCard(date: String, dayMeals: List<MealEntry>, dayWorkouts: List<E
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
                 // 펼칠 때마다 문자열을 다시 만들 필요는 없다.
-                val detail = remember(dayMeals, dayWorkouts) { buildDayDetail(date, dayMeals, dayWorkouts) }
+                val detail = remember(dayMeals, dayWorkouts, session) {
+                    buildDayDetail(date, dayMeals, dayWorkouts, session)
+                }
                 val clipboard = LocalClipboardManager.current
 
                 SelectionContainer {
@@ -135,7 +156,8 @@ private fun DayCard(date: String, dayMeals: List<MealEntry>, dayWorkouts: List<E
 private fun buildDayDetail(
     date: String,
     meals: List<MealEntry>,
-    workouts: List<ExerciseWithSets>
+    workouts: List<ExerciseWithSets>,
+    session: WorkoutSession?
 ): String = buildString {
     appendLine("[$date]")
 
@@ -143,6 +165,7 @@ private fun buildDayDetail(
         val routine = workouts.first().exercise.routineName
         appendLine()
         appendLine("■ 운동${if (routine.isBlank()) "" else " — $routine"}")
+        session?.finishedMs?.let { appendLine("운동 시간 ${formatClock(it / 1000)}") }
         workouts.sortedBy { it.exercise.orderIndex }.forEach { item ->
             appendLine()
             appendLine("· ${item.exercise.exerciseName}")
