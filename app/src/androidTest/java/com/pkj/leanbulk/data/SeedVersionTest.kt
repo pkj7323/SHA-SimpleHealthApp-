@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -50,7 +51,10 @@ class SeedVersionTest {
         repo.applySeeds()
         val chicken = requireNotNull(db.foodDao().findBySlug("chicken-breast-100g"))
 
-        assertTrue(repo.updateFood(chicken.copy(macros = Macros(kcal = 999.0), baseAmount = 123.0)))
+        assertEquals(
+            Repository.UpdateFoodResult.Ok,
+            repo.updateFood(chicken.copy(macros = Macros(kcal = 999.0), baseAmount = 123.0))
+        )
 
         // 시드를 처음부터 다시 돌려도(버전을 되돌린 상황) 고친 값이 살아남아야 한다.
         db.appMetaDao().upsert(AppMeta(seedVersion = 0))
@@ -69,7 +73,10 @@ class SeedVersionTest {
         val chicken = requireNotNull(db.foodDao().findBySlug("chicken-breast-100g"))
         val rice = requireNotNull(db.foodDao().findBySlug("rice-brown-200g"))
 
-        assertFalse(repo.updateFood(chicken.copy(name = rice.name)))
+        assertEquals(
+            Repository.UpdateFoodResult.NameTaken(hidden = false),
+            repo.updateFood(chicken.copy(name = rice.name))
+        )
         assertEquals("거절했는데 이름이 바뀌었다", "닭가슴살", requireNotNull(db.foodDao().findBySlug("chicken-breast-100g")).name)
     }
 
@@ -268,18 +275,57 @@ class SeedVersionTest {
     }
 
     @Test
-    fun 숨긴_음식은_시드를_다시_돌려도_숨은_채로_있다() = runBlocking {
+    fun 숨긴_시드_음식은_시드를_다시_돌려도_숨은_채로_있다() = runBlocking {
         repo.applySeeds()
-        val target = repo.observeFoods().first().first()
-        repo.hideFood(target.id)
+        val target = repo.observeFoods().first().first { it.source == ItemSource.SEED }
+        repo.removeFood(target)
 
         db.appMetaDao().upsert(AppMeta(seedVersion = 0))
         repo.applySeeds()
 
-        assertTrue(
-            "숨긴 음식이 시드 갱신으로 되살아났다",
-            repo.observeFoods().first().none { it.id == target.id }
+        val after = repo.observeFoods().first().first { it.id == target.id }
+        assertTrue("숨긴 음식이 시드 갱신으로 되살아났다", after.hidden)
+    }
+
+    /**
+     * 숨긴 음식이 **목록 흐름에서 사라지면 안 된다.** 사라지면 이름은 계속 차지한 채
+     * (`food_item.name`이 유니크) 화면에서 손댈 수 없어서, 같은 이름으로 새로 만들지도
+     * 되돌리지도 못하는 상태에 갇힌다. 실제로 사용자가 여기 걸렸다.
+     */
+    @Test
+    fun 숨긴_음식도_목록에는_남아_되돌릴_수_있다() = runBlocking {
+        repo.applySeeds()
+        val target = repo.observeFoods().first().first { it.source == ItemSource.SEED }
+
+        repo.removeFood(target)
+
+        val hidden = repo.observeFoods().first().firstOrNull { it.id == target.id }
+        assertNotNull("숨겼다고 목록에서 통째로 빠지면 되돌릴 방법이 없다", hidden)
+        assertTrue(requireNotNull(hidden).hidden)
+
+        // 이름이 겹친다고 알려줄 때, 상대가 숨겨져 있다는 사실까지 알려줘야 한다.
+        val other = repo.observeFoods().first().first { it.id != target.id }
+        assertEquals(
+            Repository.UpdateFoodResult.NameTaken(hidden = true),
+            repo.updateFood(other.copy(name = target.name))
         )
+
+        repo.unhideFood(target.id)
+        assertFalse(repo.observeFoods().first().first { it.id == target.id }.hidden)
+    }
+
+    /** 직접 등록한 음식은 숨기는 게 아니라 진짜로 지운다 — 지워도 시드가 되살리지 않는다. */
+    @Test
+    fun 직접_등록한_음식은_지우면_사라진다() = runBlocking {
+        repo.applySeeds()
+        val mine = repo.addUserFood("내가 만든 음식", "간편식", Macros(kcal = 100.0), null, AmountUnit.G)
+
+        repo.removeFood(mine)
+
+        assertTrue(repo.observeFoods().first().none { it.id == mine.id })
+        // 이름이 풀렸으니 같은 이름으로 다시 만들 수 있어야 한다.
+        repo.addUserFood("내가 만든 음식", "간편식", Macros(kcal = 200.0), null, AmountUnit.G)
+        assertEquals(1, repo.observeFoods().first().count { it.name == "내가 만든 음식" })
     }
 
     /**

@@ -152,7 +152,18 @@ class Repository(private val db: AppDatabase) {
 
     fun observeFoods(): Flow<List<FoodItem>> = foodDao.observeAll()
 
-    suspend fun hideFood(id: Long) = foodDao.setHidden(id, true)
+    /**
+     * 목록에서 치운다.
+     *
+     * **시드 음식은 지우지 않고 숨긴다** — 지워봐야 다음 시드 갱신 때 slug로 되살아나기
+     * 때문이다. 직접 등록한 음식은 진짜로 지운다. 이미 기록된 끼니는 이름·영양정보를
+     * 그 순간 복사해 두므로([MealFood]) 과거 기록이 망가지지 않는다.
+     */
+    suspend fun removeFood(food: FoodItem) {
+        if (food.source == ItemSource.SEED) foodDao.setHidden(food.id, true) else foodDao.delete(food.id)
+    }
+
+    suspend fun unhideFood(id: Long) = foodDao.setHidden(id, false)
 
     suspend fun setFoodFavorite(id: Long, favorite: Boolean) = foodDao.setFavorite(id, favorite)
 
@@ -183,11 +194,18 @@ class Repository(private val db: AppDatabase) {
      * 시드 음식을 고치면 그 행을 `USER`로 돌린다. 안 그러면 다음 시드 갱신이 사용자가
      * 고친 값을 그대로 덮어써서, 고쳐도 소용없는 것처럼 보인다(`FoodDao.upsertSeed`).
      */
-    suspend fun updateFood(food: FoodItem): Boolean {
-        val sameName = foodDao.findByName(food.name.trim())
-        if (sameName != null && sameName.id != food.id) return false
+    suspend fun updateFood(food: FoodItem): UpdateFoodResult {
+        val clash = foodDao.findByNameExcept(food.name.trim(), food.id)
+        if (clash != null) return UpdateFoodResult.NameTaken(hidden = clash.hidden)
         foodDao.update(food.copy(name = food.name.trim(), source = ItemSource.USER))
-        return true
+        return UpdateFoodResult.Ok
+    }
+
+    sealed interface UpdateFoodResult {
+        data object Ok : UpdateFoodResult
+
+        /** [hidden]이면 겹친 상대가 숨겨진 음식이다 — 화면에 안 보이니 그 사실을 알려줘야 한다. */
+        data class NameTaken(val hidden: Boolean) : UpdateFoodResult
     }
 
     // ---------- 내 식사(식사세트) ----------

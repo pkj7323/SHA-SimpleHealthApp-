@@ -409,18 +409,30 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
         scheduleDietSave()
     }
 
-    /** 직접 등록한 음식을 고친다. 이름이 겹치면 안내만 하고 아무것도 바꾸지 않는다. */
+    /** 음식을 고친다. 이름이 겹치면 안내만 하고 아무것도 바꾸지 않는다. */
     fun updateFood(food: FoodItem) {
         viewModelScope.launch {
-            if (!repository.updateFood(food)) {
-                _toast.value = "'${food.name.trim()}' 이름의 음식이 이미 있습니다"
+            val name = food.name.trim()
+            when (val result = repository.updateFood(food)) {
+                Repository.UpdateFoodResult.Ok -> Unit
+                is Repository.UpdateFoodResult.NameTaken -> {
+                    _toast.value = if (result.hidden) {
+                        "'$name'이(가) 숨긴 음식에 있습니다. \"숨긴 음식 보기\"에서 되돌리거나 지우세요"
+                    } else {
+                        "'$name' 이름의 음식이 이미 있습니다"
+                    }
+                }
             }
         }
     }
 
-    /** 목록에서 치운다. 시드 음식은 지우면 다음 갱신 때 되살아나므로 숨김으로 처리한다. */
-    fun hideFood(id: Long) {
-        viewModelScope.launch { repository.hideFood(id) }
+    /** 목록에서 치운다. 직접 등록한 건 진짜 삭제, 시드 음식은 숨김(지워도 되살아나므로). */
+    fun removeFood(food: FoodItem) {
+        viewModelScope.launch { repository.removeFood(food) }
+    }
+
+    fun unhideFood(id: Long) {
+        viewModelScope.launch { repository.unhideFood(id) }
     }
 
     fun addFoodToMeal(index: Int, food: FoodItem, multiplier: Double) {

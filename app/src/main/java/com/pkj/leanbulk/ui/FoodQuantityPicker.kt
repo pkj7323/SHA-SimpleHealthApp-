@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pkj.leanbulk.data.AmountUnit
 import com.pkj.leanbulk.data.FoodItem
+import com.pkj.leanbulk.data.ItemSource
 import com.pkj.leanbulk.data.Macros
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -68,7 +70,8 @@ fun FoodQuantityPickerDialog(
     onAddNewFood: suspend (
         name: String, category: String, macros: Macros, baseAmount: Double?, unit: AmountUnit
     ) -> FoodItem,
-    onHide: (Long) -> Unit,
+    onRemove: (FoodItem) -> Unit,
+    onUnhide: (Long) -> Unit,
     onDismiss: () -> Unit
 ) {
     var selected by remember { mutableStateOf<FoodItem?>(null) }
@@ -147,13 +150,14 @@ fun FoodQuantityPickerDialog(
                     FoodPickerTab.SEARCH -> SearchFoodTab(
                         foods = foods,
                         onPick = { selected = it },
-                        onHide = onHide,
+                        onRemove = onRemove,
+                        onUnhide = onUnhide,
                         onToggleFavorite = onToggleFavorite,
                         onEdit = { editing = it },
                         onDirectRegister = { showDirectRegister = true }
                     )
                     FoodPickerTab.FAVORITE -> FavoriteFoodTab(
-                        foods = foods.filter { it.favorite },
+                        foods = foods.filter { it.favorite && !it.hidden },
                         onPick = { selected = it },
                         onToggleFavorite = onToggleFavorite,
                         onEdit = { editing = it }
@@ -169,13 +173,40 @@ fun FoodQuantityPickerDialog(
 private fun SearchFoodTab(
     foods: List<FoodItem>,
     onPick: (FoodItem) -> Unit,
-    onHide: (Long) -> Unit,
+    onRemove: (FoodItem) -> Unit,
+    onUnhide: (Long) -> Unit,
     onToggleFavorite: (FoodItem) -> Unit,
     onEdit: (FoodItem) -> Unit,
     onDirectRegister: () -> Unit
 ) {
     var query by remember { mutableStateOf("") }
     var category by remember { mutableStateOf<String?>(null) }
+    // 치운 음식도 꺼내볼 수 있어야 한다. 안 그러면 이름만 차지한 채 손댈 수 없는 상태로 갇힌다.
+    var showHidden by remember { mutableStateOf(false) }
+    var pendingRemove by remember { mutableStateOf<FoodItem?>(null) }
+
+    pendingRemove?.let { food ->
+        AlertDialog(
+            onDismissRequest = { pendingRemove = null },
+            title = { Text("'${food.name}' 지울까요?") },
+            text = {
+                Text(
+                    "음식 목록에서만 없어집니다. 이미 기록한 끼니는 그대로 남습니다." +
+                        if (food.source == ItemSource.SEED) {
+                            " 기본 목록에 있는 음식이라 지우는 대신 숨깁니다 — 나중에 되돌릴 수 있습니다."
+                        } else {
+                            ""
+                        }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { onRemove(food); pendingRemove = null }) {
+                    Text(if (food.source == ItemSource.SEED) "숨기기" else "지우기")
+                }
+            },
+            dismissButton = { TextButton(onClick = { pendingRemove = null }) { Text("취소") } }
+        )
+    }
     // "일반 검색"과 "AI 검색" 중 고른다. AI 검색은 아직 백엔드가 없어 안내만 뜬다(§9.5).
     var aiSearch by remember { mutableStateOf(false) }
 
@@ -224,8 +255,20 @@ private fun SearchFoodTab(
             }
         }
 
+        val hiddenCount = foods.count { it.hidden }
+        if (hiddenCount > 0) {
+            FilterChip(
+                selected = showHidden,
+                onClick = { showHidden = !showHidden },
+                label = { Text("숨긴 음식 $hiddenCount") },
+                modifier = Modifier.padding(bottom = 8.dp).testTag("show_hidden_foods")
+            )
+        }
+
         val filtered = foods.filter {
-            (category == null || it.category == category) && it.name.contains(query, ignoreCase = true)
+            (showHidden || !it.hidden) &&
+                (category == null || it.category == category) &&
+                it.name.contains(query, ignoreCase = true)
         }
 
         LazyColumn(Modifier.heightIn(max = 320.dp)) {
@@ -251,8 +294,14 @@ private fun SearchFoodTab(
                     onToggleFavorite = { onToggleFavorite(food) },
                     onEdit = { onEdit(food) },
                     trailing = {
-                        IconButton(onClick = { onHide(food.id) }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "목록에서 숨기기")
+                        if (food.hidden) {
+                            IconButton(onClick = { onUnhide(food.id) }) {
+                                Icon(Icons.Filled.Refresh, contentDescription = "숨김 해제")
+                            }
+                        } else {
+                            IconButton(onClick = { pendingRemove = food }) {
+                                Icon(Icons.Filled.Delete, contentDescription = "목록에서 지우기")
+                            }
                         }
                     }
                 )
@@ -318,7 +367,7 @@ private fun FoodRow(
         ) {
             Text(food.name, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
-                formatMacroSummary(food.macros),
+                (if (food.hidden) "숨김 · " else "") + formatMacroSummary(food.macros),
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis

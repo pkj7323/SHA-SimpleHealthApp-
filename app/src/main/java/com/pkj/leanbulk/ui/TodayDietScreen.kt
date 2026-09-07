@@ -161,7 +161,8 @@ fun TodayDietScreen(vm: MainViewModel) {
             onAddNewFood = { name, category, macros, baseAmount, unit ->
                 vm.addNewFood(name, category, macros, baseAmount, unit)
             },
-            onHide = vm::hideFood,
+            onRemove = vm::removeFood,
+            onUnhide = vm::unhideFood,
             onDismiss = { foodPickerFor = null }
         )
     }

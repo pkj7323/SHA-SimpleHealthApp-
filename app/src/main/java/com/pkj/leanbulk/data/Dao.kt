@@ -167,8 +167,14 @@ interface MealPresetDao {
 
 @Dao
 interface FoodDao {
-    /** 음식 선택 목록. 숨긴 건 빼고, 자주 쓴 것부터 보여준다. */
-    @Query("SELECT * FROM food_item WHERE hidden = 0 ORDER BY usedCount DESC, name")
+    /**
+     * 음식 선택 목록. 자주 쓴 것부터 보여준다.
+     *
+     * **숨긴 것도 같이 흘려보낸다.** 여기서 걸러버리면 숨긴 음식이 화면에서 완전히 사라지는데,
+     * 이름은 계속 차지하고 있어서(`food_item.name`이 유니크) 같은 이름으로 새로 만들 수도,
+     * 고칠 수도 없는 상태에 갇힌다. 거르는 건 화면이 한다(숨긴 음식 보기 토글).
+     */
+    @Query("SELECT * FROM food_item ORDER BY usedCount DESC, name")
     fun observeAll(): Flow<List<FoodItem>>
 
     /** 백업 내보내기용 일회성 조회. */
@@ -183,6 +189,10 @@ interface FoodDao {
 
     @Query("UPDATE food_item SET hidden = :hidden WHERE id = :id")
     suspend fun setHidden(id: Long, hidden: Boolean)
+
+    /** 이름이 겹치는지 볼 때 쓴다. 숨긴 행도 이름을 차지하므로 [findByName]과 같이 전부 본다. */
+    @Query("SELECT * FROM food_item WHERE name = :name AND id != :exceptId LIMIT 1")
+    suspend fun findByNameExcept(name: String, exceptId: Long): FoodItem?
 
     @Query("UPDATE food_item SET favorite = :favorite WHERE id = :id")
     suspend fun setFavorite(id: Long, favorite: Boolean)
