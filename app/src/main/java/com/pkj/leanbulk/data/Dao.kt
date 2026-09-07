@@ -167,13 +167,7 @@ interface MealPresetDao {
 
 @Dao
 interface FoodDao {
-    /**
-     * 음식 선택 목록. 자주 쓴 것부터 보여준다.
-     *
-     * **숨긴 것도 같이 흘려보낸다.** 여기서 걸러버리면 숨긴 음식이 화면에서 완전히 사라지는데,
-     * 이름은 계속 차지하고 있어서(`food_item.name`이 유니크) 같은 이름으로 새로 만들 수도,
-     * 고칠 수도 없는 상태에 갇힌다. 거르는 건 화면이 한다(숨긴 음식 보기 토글).
-     */
+    /** 음식 선택 목록. 자주 쓴 것부터 보여준다. */
     @Query("SELECT * FROM food_item ORDER BY usedCount DESC, name")
     fun observeAll(): Flow<List<FoodItem>>
 
@@ -186,13 +180,6 @@ interface FoodDao {
 
     @Query("SELECT * FROM food_item WHERE slug = :slug LIMIT 1")
     suspend fun findBySlug(slug: String): FoodItem?
-
-    @Query("UPDATE food_item SET hidden = :hidden WHERE id = :id")
-    suspend fun setHidden(id: Long, hidden: Boolean)
-
-    /** 이름이 겹치는지 볼 때 쓴다. 숨긴 행도 이름을 차지하므로 [findByName]과 같이 전부 본다. */
-    @Query("SELECT * FROM food_item WHERE name = :name AND id != :exceptId LIMIT 1")
-    suspend fun findByNameExcept(name: String, exceptId: Long): FoodItem?
 
     @Query("UPDATE food_item SET favorite = :favorite WHERE id = :id")
     suspend fun setFavorite(id: Long, favorite: Boolean)
@@ -241,26 +228,9 @@ interface FoodDao {
     @Query("DELETE FROM food_item WHERE id = :id")
     suspend fun delete(id: Long)
 
-    /**
-     * 같은 이름이 있으면 매크로를 갱신하고 사용 횟수를 올린다.
-     * 없으면 새로 쌓는다 — 이때 slug를 붙여줘야 유니크 인덱스에 걸리지 않는다.
-     */
-    @Transaction
-    suspend fun remember(name: String, macros: Macros) {
-        val existing = findByName(name)
-        if (existing == null) {
-            insert(
-                FoodItem(
-                    slug = "user-${System.currentTimeMillis()}-${name.hashCode()}",
-                    name = name,
-                    macros = macros,
-                    source = ItemSource.USER
-                )
-            )
-        } else {
-            update(existing.copy(macros = macros, usedCount = existing.usedCount + 1))
-        }
-    }
+    @Query("DELETE FROM food_item WHERE id IN (:ids)")
+    suspend fun delete(ids: List<Long>)
+
 }
 
 @Dao

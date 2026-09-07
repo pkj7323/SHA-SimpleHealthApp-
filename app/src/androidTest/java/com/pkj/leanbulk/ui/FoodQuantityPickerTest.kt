@@ -89,8 +89,7 @@ class FoodQuantityPickerTest {
                     onToggleFavorite = {},
                     onEditFood = {},
                     onAddNewFood = { _, _, _, _, _ -> chicken },
-                    onRemove = {},
-                    onUnhide = {},
+                    onDeleteFoods = {},
                     onDismiss = {}
                 )
             }

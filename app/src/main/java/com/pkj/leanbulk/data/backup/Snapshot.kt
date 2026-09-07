@@ -203,7 +203,11 @@ data class FoodDto(
     val macros: MacrosDto,
     val usedCount: Int,
     val source: String = "USER",
-    val hidden: Boolean = false,
+    /**
+     * 예전엔 `hidden`이 있었다(음식 숨기기). 기능을 없애면서 빠졌는데, 옛 백업의 그 키는
+     * `ignoreUnknownKeys`가 흘려보내므로 예전 파일도 계속 읽힌다 — 숨겨져 있던 음식은
+     * 그냥 보이는 상태로 들어온다.
+     */
     /** 이 음식 "1"에 해당하는 양. 실측하지 않은 음식은 null(옛 백업도 전부 null로 읽힌다). */
     val baseAmountGram: Double? = null,
     /** 기준량의 단위(G/ML/L). 옛 백업엔 없고, 그때는 전부 g였으므로 기본값이 맞다. */

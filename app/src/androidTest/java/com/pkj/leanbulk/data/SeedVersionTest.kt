@@ -51,10 +51,7 @@ class SeedVersionTest {
         repo.applySeeds()
         val chicken = requireNotNull(db.foodDao().findBySlug("chicken-breast-100g"))
 
-        assertEquals(
-            Repository.UpdateFoodResult.Ok,
-            repo.updateFood(chicken.copy(macros = Macros(kcal = 999.0), baseAmount = 123.0))
-        )
+        repo.updateFood(chicken.copy(macros = Macros(kcal = 999.0), baseAmount = 123.0))
 
         // 시드를 처음부터 다시 돌려도(버전을 되돌린 상황) 고친 값이 살아남아야 한다.
         db.appMetaDao().upsert(AppMeta(seedVersion = 0))
@@ -66,18 +63,21 @@ class SeedVersionTest {
         assertEquals(ItemSource.USER, after.source)
     }
 
-    /** 이름이 유니크라 겹치는 이름으로는 못 고친다. 조용히 실패하지 말고 거절해야 한다. */
+    /**
+     * 같은 이름의 음식을 여러 개 둘 수 있어야 한다(닭가슴살 두 종류처럼).
+     *
+     * 예전엔 이름이 유니크라 겹치면 수정 자체를 거절했는데, 그 탓에 안 보이는 행이 이름을
+     * 붙들고 있으면 손쓸 방법이 없었다. 정체성은 slug가 맡으므로 이름은 겹쳐도 된다.
+     */
     @Test
-    fun 이름이_겹치면_고치지_않는다() = runBlocking {
+    fun 이름이_겹쳐도_저장된다() = runBlocking {
         repo.applySeeds()
         val chicken = requireNotNull(db.foodDao().findBySlug("chicken-breast-100g"))
-        val rice = requireNotNull(db.foodDao().findBySlug("rice-brown-200g"))
 
-        assertEquals(
-            Repository.UpdateFoodResult.NameTaken(hidden = false),
-            repo.updateFood(chicken.copy(name = rice.name))
-        )
-        assertEquals("거절했는데 이름이 바뀌었다", "닭가슴살", requireNotNull(db.foodDao().findBySlug("chicken-breast-100g")).name)
+        repo.updateFood(chicken.copy(name = "닭가슴살"))
+        repo.addUserFood("닭가슴살", "육류", Macros(kcal = 120.0), 100.0, AmountUnit.G)
+
+        assertEquals(2, repo.observeFoods().first().count { it.name == "닭가슴살" })
     }
 
     /** 우유·이온음료는 ml로 재는 것이라 시드 5단계가 단위를 바로잡아야 한다. */
@@ -229,7 +229,7 @@ class SeedVersionTest {
     fun 이름이_겹치면_사용자_음식을_지킨다() = runBlocking {
         // 시드가 깔리기 전에 사용자가 같은 이름으로 먼저 쌓아둔 상황.
         // 시드 카탈로그의 이름은 "닭가슴살"이다(제공량을 뗐다 — DIET-REDESIGN.md).
-        db.foodDao().remember("닭가슴살", Macros(kcal = 999.0, protein = 99.0))
+        repo.addUserFood("닭가슴살", "육류", Macros(kcal = 999.0, protein = 99.0), null, AmountUnit.G)
 
         repo.applySeeds()
 
@@ -274,58 +274,48 @@ class SeedVersionTest {
         assertEquals(100.0, after.baseAmount!!, 0.0)
     }
 
-    @Test
-    fun 숨긴_시드_음식은_시드를_다시_돌려도_숨은_채로_있다() = runBlocking {
-        repo.applySeeds()
-        val target = repo.observeFoods().first().first { it.source == ItemSource.SEED }
-        repo.removeFood(target)
-
-        db.appMetaDao().upsert(AppMeta(seedVersion = 0))
-        repo.applySeeds()
-
-        val after = repo.observeFoods().first().first { it.id == target.id }
-        assertTrue("숨긴 음식이 시드 갱신으로 되살아났다", after.hidden)
-    }
-
     /**
-     * 숨긴 음식이 **목록 흐름에서 사라지면 안 된다.** 사라지면 이름은 계속 차지한 채
-     * (`food_item.name`이 유니크) 화면에서 손댈 수 없어서, 같은 이름으로 새로 만들지도
-     * 되돌리지도 못하는 상태에 갇힌다. 실제로 사용자가 여기 걸렸다.
+     * 지운 음식은 **그냥 사라진다.** 시드로 깔린 것이든 직접 등록한 것이든 마찬가지다.
+     *
+     * 예전엔 시드 음식을 "숨김"으로만 치웠는데, 안 보이는 행이 유니크한 이름을 붙들고 있어서
+     * 같은 이름을 다시 쓸 수 없는 상태에 갇혔다(사용자가 실제로 여기 걸렸다).
      */
     @Test
-    fun 숨긴_음식도_목록에는_남아_되돌릴_수_있다() = runBlocking {
+    fun 지운_음식은_시드든_아니든_사라진다() = runBlocking {
         repo.applySeeds()
-        val target = repo.observeFoods().first().first { it.source == ItemSource.SEED }
-
-        repo.removeFood(target)
-
-        val hidden = repo.observeFoods().first().firstOrNull { it.id == target.id }
-        assertNotNull("숨겼다고 목록에서 통째로 빠지면 되돌릴 방법이 없다", hidden)
-        assertTrue(requireNotNull(hidden).hidden)
-
-        // 이름이 겹친다고 알려줄 때, 상대가 숨겨져 있다는 사실까지 알려줘야 한다.
-        val other = repo.observeFoods().first().first { it.id != target.id }
-        assertEquals(
-            Repository.UpdateFoodResult.NameTaken(hidden = true),
-            repo.updateFood(other.copy(name = target.name))
-        )
-
-        repo.unhideFood(target.id)
-        assertFalse(repo.observeFoods().first().first { it.id == target.id }.hidden)
-    }
-
-    /** 직접 등록한 음식은 숨기는 게 아니라 진짜로 지운다 — 지워도 시드가 되살리지 않는다. */
-    @Test
-    fun 직접_등록한_음식은_지우면_사라진다() = runBlocking {
-        repo.applySeeds()
+        val seeded = repo.observeFoods().first().first { it.source == ItemSource.SEED }
         val mine = repo.addUserFood("내가 만든 음식", "간편식", Macros(kcal = 100.0), null, AmountUnit.G)
 
-        repo.removeFood(mine)
+        repo.deleteFoods(listOf(seeded.id, mine.id))
 
-        assertTrue(repo.observeFoods().first().none { it.id == mine.id })
+        val left = repo.observeFoods().first()
+        assertTrue("고른 음식이 안 지워졌다", left.none { it.id == seeded.id || it.id == mine.id })
         // 이름이 풀렸으니 같은 이름으로 다시 만들 수 있어야 한다.
-        repo.addUserFood("내가 만든 음식", "간편식", Macros(kcal = 200.0), null, AmountUnit.G)
-        assertEquals(1, repo.observeFoods().first().count { it.name == "내가 만든 음식" })
+        repo.addUserFood(seeded.name, seeded.category, Macros(kcal = 1.0), null, AmountUnit.G)
+        assertEquals(1, repo.observeFoods().first().count { it.name == seeded.name })
+    }
+
+    /** 지운 음식이 이미 기록한 끼니를 건드리면 안 된다 — 끼니는 이름·영양정보를 복사해 둔다. */
+    @Test
+    fun 음식을_지워도_기록한_끼니는_남는다() = runBlocking {
+        repo.applySeeds()
+        val food = repo.addUserFood("한때 있던 음식", "간편식", Macros(kcal = 300.0), 100.0, AmountUnit.G)
+        repo.saveMealDay(
+            "2026-09-08",
+            listOf(
+                MealEntry(
+                    date = "2026-09-08", orderIndex = 0, slotName = "저녁", menuText = "",
+                    macros = Macros(), eaten = true, memo = ""
+                ) to
+                    listOf(food.toMealFood(mealEntryId = 0, orderIndex = 0, multiplier = 1.0))
+            )
+        )
+
+        repo.deleteFoods(listOf(food.id))
+
+        val line = repo.observeMealsWithFoods("2026-09-08").first().single().foods.single()
+        assertEquals("한때 있던 음식", line.name)
+        assertEquals(300.0, line.macros.kcal!!, 0.001)
     }
 
     /**

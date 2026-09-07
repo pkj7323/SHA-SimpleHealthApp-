@@ -192,17 +192,10 @@ class SelectiveMergeTest {
                 baseAmount = 500.0, baseAmountUnit = AmountUnit.ML
             )
         )
-        // 숨긴 것과 시드는 내보내지 않는다 — 다음 버전 시드에 넣을 후보가 아니다.
-        db.foodDao().insert(
-            FoodItem(
-                slug = "user-치운-음식", name = "치운 음식", macros = Macros(kcal = 10.0),
-                source = ItemSource.USER, hidden = true
-            )
-        )
 
         val exported = repo.exportUserFoods("2026-09-07T00:00:00")
 
-        assertEquals("직접 등록한 것만 나가야 한다", 1, exported.foods.size)
+        assertEquals("시드는 빼고 직접 등록한 것만 나가야 한다", 1, exported.foods.size)
         assertEquals("내가 만든 음식", exported.foods.single().name)
         assertEquals("ML", exported.foods.single().baseAmountUnit)
 

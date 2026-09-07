@@ -310,12 +310,19 @@ class SnapshotRoundTripTest {
                 baseAmount = 100.0
             )
         )
-        // 숨긴 시드 음식도 백업에 실려야 복원했을 때 다시 튀어나오지 않는다.
+        // 이름이 같은 음식을 둘 둔다 — 이름은 유니크가 아니므로 왕복에서도 둘 다 살아야 한다.
         db.foodDao().insert(
             FoodItem(
-                slug = "ramen-1pack", name = "라면 1봉", category = "간편식",
+                slug = "ramen-1pack", name = "라면", category = "간편식",
                 macros = Macros(500.0, 10.0, 79.0, 16.0, 4.0), usedCount = 0,
-                source = ItemSource.SEED, hidden = true
+                source = ItemSource.SEED
+            )
+        )
+        db.foodDao().insert(
+            FoodItem(
+                slug = "user-ramen-mine", name = "라면", category = "간편식",
+                macros = Macros(420.0, 9.0, 65.0, 13.0, 3.0), usedCount = 2,
+                source = ItemSource.USER
             )
         )
         db.foodDao().insert(

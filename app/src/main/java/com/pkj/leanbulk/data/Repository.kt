@@ -153,17 +153,16 @@ class Repository(private val db: AppDatabase) {
     fun observeFoods(): Flow<List<FoodItem>> = foodDao.observeAll()
 
     /**
-     * 목록에서 치운다.
+     * 고른 음식을 목록에서 지운다. 시드로 깔린 것도 똑같이 지운다.
      *
-     * **시드 음식은 지우지 않고 숨긴다** — 지워봐야 다음 시드 갱신 때 slug로 되살아나기
-     * 때문이다. 직접 등록한 음식은 진짜로 지운다. 이미 기록된 끼니는 이름·영양정보를
-     * 그 순간 복사해 두므로([MealFood]) 과거 기록이 망가지지 않는다.
+     * 이미 기록된 끼니는 이름·영양정보를 그 순간 복사해 두므로([MealFood]) 과거 기록이
+     * 망가지지 않는다. 다만 **시드 음식은 다음 시드 갱신 때 slug로 다시 들어올 수 있다** —
+     * 그때 또 지우면 된다. 그걸 막으려고 "숨김" 표시를 남겨뒀더니, 안 보이는 행이 유니크한
+     * 이름을 붙들고 있어서 같은 이름을 다시 쓸 수 없는 상태에 갇히는 게 더 나빴다.
      */
-    suspend fun removeFood(food: FoodItem) {
-        if (food.source == ItemSource.SEED) foodDao.setHidden(food.id, true) else foodDao.delete(food.id)
+    suspend fun deleteFoods(ids: List<Long>) {
+        if (ids.isNotEmpty()) foodDao.delete(ids)
     }
-
-    suspend fun unhideFood(id: Long) = foodDao.setHidden(id, false)
 
     suspend fun setFoodFavorite(id: Long, favorite: Boolean) = foodDao.setFavorite(id, favorite)
 
@@ -188,25 +187,14 @@ class Repository(private val db: AppDatabase) {
     }
 
     /**
-     * 직접 등록한 음식을 나중에 고친다. 이름이 다른 음식과 겹치면 **고치지 않고 false**를 준다
-     * (`food_item.name`이 유니크라 그대로 밀어 넣으면 예외가 난다).
+     * 음식을 고친다. **이름이 겹쳐도 그대로 저장한다** — 같은 이름의 음식을 여러 개 두는 건
+     * 사용자 자유이고(닭가슴살 두 종류처럼), 기기 간 정체성은 slug가 맡는다.
      *
      * 시드 음식을 고치면 그 행을 `USER`로 돌린다. 안 그러면 다음 시드 갱신이 사용자가
      * 고친 값을 그대로 덮어써서, 고쳐도 소용없는 것처럼 보인다(`FoodDao.upsertSeed`).
      */
-    suspend fun updateFood(food: FoodItem): UpdateFoodResult {
-        val clash = foodDao.findByNameExcept(food.name.trim(), food.id)
-        if (clash != null) return UpdateFoodResult.NameTaken(hidden = clash.hidden)
+    suspend fun updateFood(food: FoodItem) =
         foodDao.update(food.copy(name = food.name.trim(), source = ItemSource.USER))
-        return UpdateFoodResult.Ok
-    }
-
-    sealed interface UpdateFoodResult {
-        data object Ok : UpdateFoodResult
-
-        /** [hidden]이면 겹친 상대가 숨겨진 음식이다 — 화면에 안 보이니 그 사실을 알려줘야 한다. */
-        data class NameTaken(val hidden: Boolean) : UpdateFoodResult
-    }
 
     // ---------- 내 식사(식사세트) ----------
 
@@ -326,8 +314,7 @@ class Repository(private val db: AppDatabase) {
      * **직접 등록한 음식만** 스냅샷 하나에 담는다(ROADMAP 3번 "시드 승격").
      *
      * 시드로 깔린 음식은 뺀다 — 이미 앱에 들어 있으니 다시 내보낼 이유가 없고, 이 파일의
-     * 쓸모가 "다음 버전 시드에 넣을 후보"이기 때문이다. 숨긴 음식도 뺀다(치워둔 걸 다시
-     * 올릴 이유가 없다).
+     * 쓸모가 "다음 버전 시드에 넣을 후보"이기 때문이다.
      *
      * 포맷은 일반 백업과 같은 [Snapshot]이다. 따로 만들면 읽는 코드가 두 벌이 되고,
      * 이 파일 그대로 "골라서 가져오기"에 넣을 수도 있다.
@@ -335,9 +322,7 @@ class Repository(private val db: AppDatabase) {
     suspend fun exportUserFoods(exportedAt: String): Snapshot = Snapshot(
         exportedAt = exportedAt,
         seedVersion = seedVersion(),
-        foods = foodDao.getAll()
-            .filter { it.source == ItemSource.USER && !it.hidden }
-            .map { it.toDto() }
+        foods = foodDao.getAll().filter { it.source == ItemSource.USER }.map { it.toDto() }
     )
 
     /** 지금 DB 전체를 스냅샷 하나로 뜬다. 백업 파일과 동기화가 같은 포맷을 쓴다. */
@@ -501,15 +486,11 @@ class Repository(private val db: AppDatabase) {
         }
 
         // 음식은 slug로 대조한다. 이미 있으면 건너뛴다 — 남의 파일이 내가 고쳐둔
-        // 영양정보를 덮어쓰면 안 된다. 이름만 겹치는 경우는 뒤에 번호를 붙여 둘 다 남긴다
-        // (`food_item.name`이 유니크라 그대로 넣으면 삽입이 조용히 무시된다).
-        val takenFoodNames = foodDao.getAll().map { it.name }.toMutableSet()
+        // 영양정보를 덮어쓰면 안 된다. 이름이 겹치는 건 그대로 둔다(이름은 유니크가 아니다).
         var addedFoods = 0
         foods.forEach { dto ->
             if (foodDao.findBySlug(dto.slug) != null) return@forEach
-            val name = uniqueName(dto.name, takenFoodNames)
-            takenFoodNames += name
-            foodDao.insert(dto.toEntity().copy(name = name, source = ItemSource.USER))
+            foodDao.insert(dto.toEntity().copy(source = ItemSource.USER))
             addedFoods++
         }
 

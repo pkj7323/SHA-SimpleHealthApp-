@@ -166,7 +166,6 @@ object SnapshotCodec {
         macros = macros.toDto(),
         usedCount = usedCount,
         source = source.name,
-        hidden = hidden,
         baseAmountGram = baseAmount,
         baseAmountUnit = baseAmountUnit.name,
         favorite = favorite
@@ -347,7 +346,6 @@ object SnapshotCodec {
         macros = macros.toEntity(),
         usedCount = usedCount,
         source = runCatching { ItemSource.valueOf(source) }.getOrDefault(ItemSource.USER),
-        hidden = hidden,
         baseAmount = baseAmountGram,
         baseAmountUnit = amountUnitOf(baseAmountUnit),
         favorite = favorite

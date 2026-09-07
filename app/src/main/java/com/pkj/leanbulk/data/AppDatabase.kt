@@ -279,6 +279,47 @@ internal val MIGRATION_13_14 = Migration(13, 14) { db ->
     db.execSQL("ALTER TABLE `meal_preset_food` ADD COLUMN `amountUnit` TEXT NOT NULL DEFAULT 'G'")
 }
 
+/**
+ * 14 → 15: 음식의 `hidden` 컬럼을 없애고(숨기기 기능 폐기) 이름의 유니크 인덱스를 푼다.
+ *
+ * 숨기기는 **삭제로 오해되는데 되돌릴 수가 없었다.** 게다가 숨긴 행이 유니크한 이름을 계속
+ * 붙들고 있어서, 같은 이름으로 새로 만들지도 고치지도 못하는 상태에 갇혔다. 종목에서 이미
+ * 같은 이유로 없앴던 기능이다(8→9). 이제 음식도 그냥 지운다.
+ *
+ * **숨겨져 있던 음식은 다시 보이게 된다.** 8→9와 같은 판단이다 — 되돌릴 수단 없이 갇혀
+ * 있느니 보이는 게 낫고, 필요 없으면 이제 진짜로 지울 수 있다.
+ *
+ * 이름 유니크를 푸는 이유는 같은 이름의 음식을 여러 개 두고 싶다는 요구 때문이다
+ * (닭가슴살 두 종류처럼). 기기 간 정체성은 slug가 맡으므로 이름이 겹쳐도 문제가 없다.
+ *
+ * SQLite 3.19에는 DROP COLUMN이 없어서 테이블을 새로 만들어 옮겨 담는다(8→9와 같은 방식).
+ * `food_item`을 가리키는 외래키는 없고(`meal_food.foodId`는 그냥 nullable 컬럼이다)
+ * CREATE 문은 `app/schemas/15.json`의 createSql을 그대로 옮긴 것이다.
+ */
+internal val MIGRATION_14_15 = Migration(14, 15) { db ->
+    db.execSQL(
+        "CREATE TABLE IF NOT EXISTS `food_item_new` (" +
+            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `slug` TEXT NOT NULL DEFAULT '', " +
+            "`name` TEXT NOT NULL, `category` TEXT NOT NULL DEFAULT '기타', " +
+            "`usedCount` INTEGER NOT NULL, `source` TEXT NOT NULL DEFAULT 'USER', " +
+            "`favorite` INTEGER NOT NULL DEFAULT 0, `baseAmountGram` REAL, " +
+            "`baseAmountUnit` TEXT NOT NULL DEFAULT 'G', " +
+            "`kcal` REAL, `protein` REAL, `carbs` REAL, `fat` REAL, `sugar` REAL)"
+    )
+    db.execSQL(
+        "INSERT INTO `food_item_new` " +
+            "(`id`, `slug`, `name`, `category`, `usedCount`, `source`, `favorite`, " +
+            "`baseAmountGram`, `baseAmountUnit`, `kcal`, `protein`, `carbs`, `fat`, `sugar`) " +
+            "SELECT `id`, `slug`, `name`, `category`, `usedCount`, `source`, `favorite`, " +
+            "`baseAmountGram`, `baseAmountUnit`, `kcal`, `protein`, `carbs`, `fat`, `sugar` " +
+            "FROM `food_item`"
+    )
+    db.execSQL("DROP TABLE `food_item`")
+    db.execSQL("ALTER TABLE `food_item_new` RENAME TO `food_item`")
+    db.execSQL("CREATE INDEX IF NOT EXISTS `index_food_item_name` ON `food_item` (`name`)")
+    db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_food_item_slug` ON `food_item` (`slug`)")
+}
+
 @Database(
     entities = [
         MealEntry::class,
@@ -298,7 +339,7 @@ internal val MIGRATION_13_14 = Migration(13, 14) { db ->
         AppMeta::class,
         Exercise::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -329,11 +370,11 @@ abstract class AppDatabase : RoomDatabase() {
          */
         internal val MIGRATIONS = arrayOf(
             MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
-            MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14
+            MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15
         )
 
         /** 마이그레이션 테스트가 참조한다. `@Database`의 version과 항상 같아야 한다. */
-        internal const val VERSION = 14
+        internal const val VERSION = 15
 
         fun get(context: Context): AppDatabase =
             instance ?: synchronized(this) {

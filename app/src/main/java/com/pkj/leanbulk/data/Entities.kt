@@ -116,7 +116,10 @@ data class DietTemplateWithMeals(
  */
 @Entity(
     tableName = "food_item",
-    indices = [Index(value = ["name"], unique = true), Index(value = ["slug"], unique = true)]
+    // 이름은 유니크가 아니다. 같은 이름을 여러 개 두는 걸 막으면(닭가슴살 두 종류처럼)
+    // 사용자가 원하는 대로 목록을 꾸릴 수 없고, 이름이 겹친다는 이유로 수정이 막힌다.
+    // 기기 간 정체성은 [FoodItem.slug]가 맡는다.
+    indices = [Index(value = ["name"]), Index(value = ["slug"], unique = true)]
 )
 data class FoodItem(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -127,8 +130,6 @@ data class FoodItem(
     @androidx.room.Embedded val macros: Macros,
     val usedCount: Int = 1,
     @ColumnInfo(defaultValue = "USER") val source: ItemSource = ItemSource.USER,
-    /** 지우지 않고 숨긴다 — 지우면 다음 시드 갱신 때 slug로 되살아난다. */
-    @ColumnInfo(defaultValue = "0") val hidden: Boolean = false,
     /** 검색 없이 목록 위쪽에서 바로 찾게 한다. [MealPreset](여러 음식+수량 묶음)과는 다른 기능이다. */
     @ColumnInfo(defaultValue = "0") val favorite: Boolean = false,
     /**
