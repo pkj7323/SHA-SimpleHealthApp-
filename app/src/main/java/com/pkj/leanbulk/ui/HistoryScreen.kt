@@ -220,7 +220,7 @@ private fun buildDayDetail(
     if (workouts.isNotEmpty()) {
         val routine = workouts.first().exercise.routineName
         appendLine()
-        appendLine("■ 운동${if (routine.isBlank()) "" else " — $routine"}")
+        appendLine("[운동]${if (routine.isBlank()) "" else " $routine"}")
         session?.finishedMs?.let { appendLine("운동 시간 ${formatClock(it / 1000)}") }
         workouts.sortedBy { it.exercise.orderIndex }.forEach { item ->
             appendLine()
@@ -240,7 +240,8 @@ private fun buildDayDetail(
     val filled = meals.filter { it.hasContent }
     if (filled.isNotEmpty()) {
         appendLine()
-        appendLine("■ 식단")
+        // 헤더 줄에 그날 총 칼로리를 같이 적는다. 붙여넣었을 때 첫 줄만 봐도 알 수 있게.
+        appendLine("[식단] ${filled.sumOf { it.macros.kcal ?: 0.0 }.roundToInt()}kcal")
         filled.sortedBy { it.orderIndex }.forEach { m ->
             appendLine()
             val kcalText = m.macros.kcal?.let { "${it.roundToInt()}kcal" } ?: "영양정보 없음"
