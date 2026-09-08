@@ -17,14 +17,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -49,6 +44,8 @@ import com.pkj.leanbulk.data.backup.RoutineDto
 import com.pkj.leanbulk.data.backup.Snapshot
 import com.pkj.leanbulk.export.ShareUtils
 import com.pkj.leanbulk.export.XlsxExporter
+import com.pkj.leanbulk.ui.theme.ShaSpacing
+import com.pkj.leanbulk.ui.theme.ShaTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -84,32 +81,48 @@ fun ExportScreen(vm: MainViewModel) {
         }
     }
 
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
-        Text("엑셀 내보내기", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
-        Text("기존 운동일지.xlsx와 동일한 시트 구성(운동일지/종목목록/신체기록/식단체크/사용법)으로 내보냅니다.")
-        Spacer(Modifier.height(16.dp))
+    ShaScreen {
+    Column(
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+            .padding(horizontal = ShaSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(ShaSpacing.md)
+    ) {
+        Text(
+            "내보내기",
+            style = ShaTheme.type.h1,
+            color = ShaTheme.colors.ink,
+            modifier = Modifier.padding(top = ShaSpacing.lg, bottom = ShaSpacing.md)
+        )
+
+        ShaCard {
+        Column {
+        SectionHeader("엑셀 내보내기", "운동일지 · 종목목록 · 신체기록 · 식단체크 · 사용법 시트로 내보냅니다.")
 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = useRange, onCheckedChange = { useRange = it })
-            Text("기간 지정 (끄면 전체 기록을 내보냅니다)")
+            Text(
+                "기간 지정 (끄면 전체)",
+                style = ShaTheme.type.body,
+                color = ShaTheme.colors.ink
+            )
         }
 
         if (useRange) {
             Row(
-                Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Modifier.fillMaxWidth().padding(top = ShaSpacing.xs),
+                horizontalArrangement = Arrangement.spacedBy(ShaSpacing.md),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                DatePickButton(startDate, context) { startDate = it }
-                Text("~")
-                DatePickButton(endDate, context) { endDate = it }
+                DatePickButton(startDate, context, Modifier.weight(1f)) { startDate = it }
+                Text("~", style = ShaTheme.type.body, color = ShaTheme.colors.muted)
+                DatePickButton(endDate, context, Modifier.weight(1f)) { endDate = it }
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(ShaSpacing.md))
 
-        Button(
+        ShaPrimaryButton(
+            text = if (useRange) "xlsx 만들기 ($startDate ~ $endDate)" else "xlsx 만들기",
             modifier = Modifier.fillMaxWidth(),
             onClick = {
                 // 사용자가 시작/종료일을 거꾸로 골랐어도 알아서 바로잡는다.
@@ -128,41 +141,64 @@ fun ExportScreen(vm: MainViewModel) {
                     status = "생성 완료: ${file.name}"
                 }
             }
-        ) { Text(if (useRange) "xlsx 파일 생성 ($startDate ~ $endDate)" else "xlsx 파일 생성") }
+        )
 
-        Spacer(Modifier.height(8.dp))
-
-        Button(
-            modifier = Modifier.fillMaxWidth(),
-            enabled = lastFile != null,
-            onClick = {
-                lastFile?.let { context.startActivity(ShareUtils.shareIntentFor(context, it)) }
+        // 만들기 전에는 공유할 것이 없다. 눌리지 않는 버튼을 미리 보여주는 대신 감춘다.
+        if (lastFile != null) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = ShaSpacing.md),
+                horizontalArrangement = Arrangement.spacedBy(ShaSpacing.md)
+            ) {
+                ShaSecondaryButton(
+                    text = "공유",
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        lastFile?.let { context.startActivity(ShareUtils.shareIntentFor(context, it)) }
+                    }
+                )
+                ShaSecondaryButton(
+                    text = "파일로 저장",
+                    modifier = Modifier.weight(1f),
+                    onClick = { lastFile?.let { saveLauncher.launch(it.name) } }
+                )
             }
-        ) { Text("공유하기") }
+        }
 
-        Spacer(Modifier.height(8.dp))
-
-        Button(
-            modifier = Modifier.fillMaxWidth(),
-            enabled = lastFile != null,
-            onClick = { lastFile?.let { saveLauncher.launch(it.name) } }
-        ) { Text("다른 폴더에 저장") }
-
-        Spacer(Modifier.height(16.dp))
-        Text(status)
-
-        Spacer(Modifier.height(24.dp))
-        HorizontalDivider()
-        Spacer(Modifier.height(24.dp))
+        StatusLine(status)
+        }
+        }
 
         BackupSection(vm)
 
-        Spacer(Modifier.height(24.dp))
-        HorizontalDivider()
-        Spacer(Modifier.height(24.dp))
-
         UserFoodExportSection(vm)
+
+        Spacer(Modifier.height(ShaSpacing.xxl))
     }
+    }
+}
+
+/** 구역 머리. 제목과 한 줄 설명을 늘 같은 모양으로 붙인다. */
+@Composable
+private fun SectionHeader(title: String, description: String) {
+    Text(title, style = ShaTheme.type.h2, color = ShaTheme.colors.ink)
+    Text(
+        description,
+        style = ShaTheme.type.caption,
+        color = ShaTheme.colors.muted,
+        modifier = Modifier.padding(top = 2.dp, bottom = ShaSpacing.md)
+    )
+}
+
+/** 진행 상태 한 줄. 할 말이 없으면 자리도 안 차지한다. */
+@Composable
+private fun StatusLine(status: String) {
+    if (status.isBlank()) return
+    Text(
+        status,
+        style = ShaTheme.type.caption,
+        color = ShaTheme.colors.muted,
+        modifier = Modifier.padding(top = ShaSpacing.md)
+    )
 }
 
 /**
@@ -201,12 +237,12 @@ private fun BackupSection(vm: MainViewModel) {
         }
     }
 
-    Text("백업 · 복원", style = MaterialTheme.typography.titleMedium)
-    Spacer(Modifier.height(8.dp))
-    Text("모든 기록을 파일 하나로 저장하고 되돌립니다. 폰을 바꾸거나 기록을 옮길 때 씁니다.")
-    Spacer(Modifier.height(16.dp))
+    ShaCard {
+    Column {
+    SectionHeader("백업 · 복원", "모든 기록을 파일 하나로. 폰을 바꾸거나 기록을 옮길 때 씁니다.")
 
-    Button(
+    ShaPrimaryButton(
+        text = "백업 파일 만들기",
         modifier = Modifier.fillMaxWidth(),
         enabled = !working,
         onClick = {
@@ -222,85 +258,75 @@ private fun BackupSection(vm: MainViewModel) {
                 working = false
             }
         }
-    ) { Text("백업 파일 만들기") }
+    )
 
-    Spacer(Modifier.height(8.dp))
-
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(
-            modifier = Modifier.weight(1f),
-            enabled = backupFile != null,
-            onClick = {
-                backupFile?.let {
-                    context.startActivity(ShareUtils.shareIntentFor(context, it, BackupFiles.MIME, "백업 공유하기"))
+    if (backupFile != null) {
+        Row(
+            Modifier.fillMaxWidth().padding(top = ShaSpacing.md),
+            horizontalArrangement = Arrangement.spacedBy(ShaSpacing.md)
+        ) {
+            ShaSecondaryButton(
+                text = "공유",
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    backupFile?.let {
+                        context.startActivity(ShareUtils.shareIntentFor(context, it, BackupFiles.MIME, "백업 공유하기"))
+                    }
                 }
-            }
-        ) { Text("공유하기") }
-
-        Button(
-            modifier = Modifier.weight(1f),
-            enabled = backupFile != null,
-            onClick = { backupFile?.let { saveLauncher.launch(it.name) } }
-        ) { Text("파일로 저장") }
+            )
+            ShaSecondaryButton(
+                text = "파일로 저장",
+                modifier = Modifier.weight(1f),
+                onClick = { backupFile?.let { saveLauncher.launch(it.name) } }
+            )
+        }
     }
 
-    Spacer(Modifier.height(16.dp))
+    ShaSecondaryButton(
+        text = "백업 파일 불러오기",
+        modifier = Modifier.fillMaxWidth().padding(top = ShaSpacing.md),
+        onClick = { if (!working) openLauncher.launch(arrayOf("*/*")) }
+    )
 
-    OutlinedButton(
-        modifier = Modifier.fillMaxWidth(),
-        enabled = !working,
-        onClick = { openLauncher.launch(arrayOf("*/*")) }
-    ) { Text("백업 파일 불러오기") }
-
-    Spacer(Modifier.height(8.dp))
-    Text(status)
+    StatusLine(status)
+    }
+    }
 
     pendingImport?.let { snapshot ->
-        AlertDialog(
-            onDismissRequest = { pendingImport = null },
-            title = { Text("이 파일을 어떻게 쓸까요?") },
-            text = {
-                Column {
-                    Text(snapshot.summarize())
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        "골라서 가져오면 지금 기록은 그대로 두고 고른 것만 더합니다.\n" +
-                            "전체 덮어쓰기는 지금 기록을 모두 이 내용으로 바꿉니다(직전 상태는 앱 안에 남겨둡니다).",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    // 덮어쓰기는 되돌리기 번거로운 쪽이라 눈에 덜 띄는 자리에 둔다.
-                    OutlinedButton(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = {
-                            pendingImport = null
-                            scope.launch {
-                                working = true
-                                status = runCatching {
-                                    vm.applyImport(snapshot) { current ->
-                                        withContext(Dispatchers.IO) {
-                                            BackupFiles.saveRollbackPoint(context, current)
-                                        }
-                                    }
-                                }.fold(
-                                    onSuccess = { "전체 불러오기 완료" },
-                                    onFailure = { "불러오기 실패: ${it.message}" }
-                                )
-                                working = false
+        ShaDialog(
+            title = "이 파일을 어떻게 쓸까요?",
+            onDismiss = { pendingImport = null },
+            confirmText = "골라서 가져오기",
+            onConfirm = { pendingImport = null; mergeFrom = snapshot },
+            // 전체 덮어쓰기는 되돌리기 번거로운 쪽이라 버튼 줄 위에 따로 둔다.
+            destructiveText = "전체 덮어쓰기",
+            onDestructive = {
+                pendingImport = null
+                scope.launch {
+                    working = true
+                    status = runCatching {
+                        vm.applyImport(snapshot) { current ->
+                            withContext(Dispatchers.IO) {
+                                BackupFiles.saveRollbackPoint(context, current)
                             }
                         }
-                    ) { Text("전체 덮어쓰기") }
+                    }.fold(
+                        onSuccess = { "전체 불러오기 완료" },
+                        onFailure = { "불러오기 실패: ${it.message}" }
+                    )
+                    working = false
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { pendingImport = null; mergeFrom = snapshot }) {
-                    Text("골라서 가져오기")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingImport = null }) { Text("취소") }
             }
-        )
+        ) {
+            Text(snapshot.summarize(), style = ShaTheme.type.body, color = ShaTheme.colors.bodyText)
+            Text(
+                "골라서 가져오면 지금 기록은 그대로 두고 고른 것만 더합니다. " +
+                    "전체 덮어쓰기는 지금 기록을 모두 이 내용으로 바꿉니다(직전 상태는 앱 안에 남겨둡니다).",
+                style = ShaTheme.type.caption,
+                color = ShaTheme.colors.muted,
+                modifier = Modifier.padding(top = ShaSpacing.md)
+            )
+        }
     }
 
     mergeFrom?.let { snapshot ->
@@ -354,12 +380,12 @@ private fun UserFoodExportSection(vm: MainViewModel) {
         }
     }
 
-    Text("내 음식 내보내기", style = MaterialTheme.typography.titleMedium)
-    Spacer(Modifier.height(8.dp))
-    Text("직접 등록한 음식만 파일로 뽑습니다. 시드에 없는 음식을 모아 다음 버전에 넣을 때 씁니다.")
-    Spacer(Modifier.height(16.dp))
+    ShaCard {
+    Column {
+    SectionHeader("내 음식 내보내기", "직접 등록한 음식만 파일로. 다음 버전 기본 목록에 넣을 후보를 모읍니다.")
 
-    Button(
+    ShaPrimaryButton(
+        text = "내 음식 파일 만들기",
         modifier = Modifier.fillMaxWidth(),
         enabled = !working,
         onClick = {
@@ -379,30 +405,33 @@ private fun UserFoodExportSection(vm: MainViewModel) {
                 working = false
             }
         }
-    ) { Text("내 음식 파일 만들기") }
+    )
 
-    Spacer(Modifier.height(8.dp))
-
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(
-            modifier = Modifier.weight(1f),
-            enabled = file != null,
-            onClick = {
-                file?.let {
-                    context.startActivity(ShareUtils.shareIntentFor(context, it, BackupFiles.MIME, "내 음식 공유하기"))
+    if (file != null) {
+        Row(
+            Modifier.fillMaxWidth().padding(top = ShaSpacing.md),
+            horizontalArrangement = Arrangement.spacedBy(ShaSpacing.md)
+        ) {
+            ShaSecondaryButton(
+                text = "공유",
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    file?.let {
+                        context.startActivity(ShareUtils.shareIntentFor(context, it, BackupFiles.MIME, "내 음식 공유하기"))
+                    }
                 }
-            }
-        ) { Text("공유하기") }
-
-        Button(
-            modifier = Modifier.weight(1f),
-            enabled = file != null,
-            onClick = { file?.let { saveLauncher.launch(it.name) } }
-        ) { Text("파일로 저장") }
+            )
+            ShaSecondaryButton(
+                text = "파일로 저장",
+                modifier = Modifier.weight(1f),
+                onClick = { file?.let { saveLauncher.launch(it.name) } }
+            )
+        }
     }
 
-    Spacer(Modifier.height(8.dp))
-    Text(status)
+    StatusLine(status)
+    }
+    }
 }
 
 /**
@@ -429,11 +458,14 @@ private fun SelectiveMergeDialog(
     val nothingPicked =
         routines.isEmpty() && templates.isEmpty() && exercises.isEmpty() && foods.isEmpty()
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("가져올 항목 고르기") },
-        text = {
-            LazyColumn(Modifier.heightIn(max = 420.dp)) {
+    ShaDialog(
+        title = "가져올 항목 고르기",
+        onDismiss = onDismiss,
+        confirmText = "가져오기",
+        confirmEnabled = !nothingPicked,
+        onConfirm = { onMerge(routines.toList(), templates.toList(), exercises.toList(), foods.toList()) }
+    ) {
+            LazyColumn(Modifier.heightIn(max = 380.dp)) {
                 if (snapshot.routines.isNotEmpty()) {
                     item { SectionLabel("루틴") }
                     items(snapshot.routines, key = { it.name + it.orderIndex }) { dto ->
@@ -483,30 +515,22 @@ private fun SelectiveMergeDialog(
                     Text(
                         "고른 루틴이 쓰는 종목은 자동으로 같이 들어옵니다. " +
                             "이름이 겹치면 덮어쓰지 않고 뒤에 번호를 붙입니다.",
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 12.dp)
+                        style = ShaTheme.type.caption,
+                        color = ShaTheme.colors.muted,
+                        modifier = Modifier.padding(top = ShaSpacing.md)
                     )
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = !nothingPicked,
-                onClick = {
-                    onMerge(routines.toList(), templates.toList(), exercises.toList(), foods.toList())
-                }
-            ) { Text("가져오기") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
-    )
+    }
 }
 
 @Composable
 private fun SectionLabel(text: String) {
     Text(
         text,
-        style = MaterialTheme.typography.labelLarge,
-        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+        style = ShaTheme.type.caption,
+        color = ShaTheme.colors.muted,
+        modifier = Modifier.padding(top = ShaSpacing.md, bottom = ShaSpacing.xs)
     )
 }
 
@@ -518,8 +542,14 @@ private fun CheckRow(checked: Boolean, title: String, subtitle: String, onToggle
     ) {
         Checkbox(checked = checked, onCheckedChange = { onToggle() })
         Column(Modifier.weight(1f)) {
-            Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall)
+            Text(
+                title,
+                style = ShaTheme.type.bodyStrong,
+                color = ShaTheme.colors.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(subtitle, style = ShaTheme.type.caption, color = ShaTheme.colors.muted)
         }
     }
 }
@@ -534,15 +564,24 @@ private fun Snapshot.summarize(): String = buildString {
 }
 
 @Composable
-private fun DatePickButton(date: String, context: android.content.Context, onChange: (String) -> Unit) {
-    OutlinedButton(onClick = {
-        val current = LocalDate.parse(date)
-        DatePickerDialog(
-            context,
-            { _, y, m, d -> onChange(LocalDate.of(y, m + 1, d).toString()) },
-            current.year, current.monthValue - 1, current.dayOfMonth
-        ).show()
-    }) { Text(date) }
+private fun DatePickButton(
+    date: String,
+    context: android.content.Context,
+    modifier: Modifier = Modifier,
+    onChange: (String) -> Unit
+) {
+    ShaSecondaryButton(
+        text = date,
+        modifier = modifier,
+        onClick = {
+            val current = LocalDate.parse(date)
+            DatePickerDialog(
+                context,
+                { _, y, m, d -> onChange(LocalDate.of(y, m + 1, d).toString()) },
+                current.year, current.monthValue - 1, current.dayOfMonth
+            ).show()
+        }
+    )
 }
 
 private fun List<MealEntry>.mealsInRange(range: ClosedRange<String>?): List<MealEntry> =
