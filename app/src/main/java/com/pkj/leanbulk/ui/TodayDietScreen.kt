@@ -499,50 +499,51 @@ private fun MealPresetDialog(
     onSaveCurrent: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("내 식사") },
-        text = {
-            Column {
-                if (presets.isEmpty()) {
-                    Text(
-                        "저장된 내 식사가 없습니다. 끼니에 음식을 담은 뒤 아래 \"지금 조합 저장\"으로 만듭니다.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                LazyColumn(Modifier.heightIn(max = 320.dp)) {
-                    items(presets, key = { it.preset.id }) { preset ->
-                        Row(
-                            Modifier.fillMaxWidth().testTag("meal_preset_row_${preset.preset.id}"),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            TextButton(onClick = { onPick(preset) }, modifier = Modifier.weight(1f)) {
-                                Column(Modifier.fillMaxWidth()) {
-                                    Text(preset.preset.name)
-                                    Text(
-                                        preset.foods.joinToString(" + ") { it.name },
-                                        style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                            IconButton(onClick = { onDelete(preset.preset.id) }) {
-                                Icon(Icons.Filled.Delete, contentDescription = "내 식사 삭제")
-                            }
-                        }
+    val colors = ShaTheme.colors
+    val type = ShaTheme.type
+
+    ShaDialog(
+        title = "내 식사",
+        onDismiss = onDismiss,
+        dismissText = "닫기",
+        // 지금 조합을 저장하는 게 이 창에서 유일하게 "만드는" 일이다.
+        confirmText = if (canSaveCurrent) "지금 조합 저장" else null,
+        onConfirm = if (canSaveCurrent) onSaveCurrent else null
+    ) {
+        if (presets.isEmpty()) {
+            Text(
+                "저장된 내 식사가 없습니다. 끼니에 음식을 담은 뒤 \"지금 조합 저장\"으로 만듭니다.",
+                style = type.caption,
+                color = colors.muted
+            )
+        }
+        LazyColumn(Modifier.heightIn(max = 320.dp)) {
+            items(presets, key = { it.preset.id }) { preset ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onPick(preset) }
+                        .padding(vertical = ShaSpacing.md)
+                        .testTag("meal_preset_row_${preset.preset.id}"),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(preset.preset.name, style = type.bodyStrong, color = colors.ink)
+                        Text(
+                            preset.foods.joinToString(" + ") { it.name },
+                            style = type.caption,
+                            color = colors.muted,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    IconButton(onClick = { onDelete(preset.preset.id) }) {
+                        Icon(Icons.Filled.Delete, contentDescription = "내 식사 삭제", tint = colors.muted)
                     }
                 }
-                if (canSaveCurrent) {
-                    OutlinedButton(
-                        onClick = onSaveCurrent,
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                    ) { Text("지금 조합 저장") }
-                }
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } }
-    )
+        }
+    }
 }
 
 
@@ -570,15 +571,25 @@ private fun TargetDialog(
 
     val suggestion = latestWeightKg?.let { TargetCalculator.suggest(it, goal, activity) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("하루 섭취 목표") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("목적", style = MaterialTheme.typography.labelLarge)
+    ShaDialog(
+        title = "하루 섭취 목표",
+        onDismiss = onDismiss,
+        confirmText = "저장",
+        onConfirm = {
+            onSave(
+                DietTarget(
+                    kcal = kcal, protein = protein, carbs = carbs, fat = fat, sugar = sugar,
+                    goal = goal, activityLevel = activity
+                )
+            )
+        }
+    ) {
+        Column(
+            // 칸이 많아 창이 화면을 넘어간다. 안에서만 구르게 높이를 묶는다.
+            modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(ShaSpacing.md)
+        ) {
+                Text("목적", style = ShaTheme.type.caption, color = ShaTheme.colors.muted)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     GoalType.entries.forEach { item ->
                         FilterChip(
@@ -589,7 +600,7 @@ private fun TargetDialog(
                     }
                 }
 
-                Text("활동량", style = MaterialTheme.typography.labelLarge)
+                Text("활동량", style = ShaTheme.type.caption, color = ShaTheme.colors.muted)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     ActivityLevel.entries.forEach { item ->
                         FilterChip(
@@ -603,16 +614,19 @@ private fun TargetDialog(
                 if (suggestion == null) {
                     Text(
                         "권장값을 계산하려면 신체 탭에 체중을 한 번 기록해 주세요.",
-                        style = MaterialTheme.typography.bodySmall
+                        style = ShaTheme.type.caption,
+                        color = ShaTheme.colors.muted
                     )
                 } else {
                     Text(
                         "체중 ${latestWeightKg}kg 기준 권장값 — " +
                             "${suggestion.kcal.toInt()}kcal · 단백질 ${suggestion.protein.toInt()}g · " +
                             "탄수 ${suggestion.carbs.toInt()}g · 지방 ${suggestion.fat.toInt()}g",
-                        style = MaterialTheme.typography.bodySmall
+                        style = ShaTheme.type.caption,
+                        color = ShaTheme.colors.muted
                     )
-                    OutlinedButton(
+                    ShaSecondaryButton(
+                        text = "권장값으로 채우기",
                         modifier = Modifier.fillMaxWidth(),
                         onClick = {
                             kcal = suggestion.kcal
@@ -621,32 +635,16 @@ private fun TargetDialog(
                             fat = suggestion.fat
                             sugar = suggestion.sugar
                         }
-                    ) { Text("권장값으로 채우기") }
+                    )
                 }
-
-                HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
                 LabeledNumberField("칼로리 (kcal)", kcal) { kcal = it }
                 LabeledNumberField("단백질 (g)", protein) { protein = it }
                 LabeledNumberField("탄수화물 (g)", carbs) { carbs = it }
                 LabeledNumberField("지방 (g)", fat) { fat = it }
                 LabeledNumberField("당 (g)", sugar) { sugar = it }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onSave(
-                        DietTarget(
-                            kcal = kcal, protein = protein, carbs = carbs, fat = fat, sugar = sugar,
-                            goal = goal, activityLevel = activity
-                        )
-                    )
-                }
-            ) { Text("저장") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
-    )
+        }
+    }
 }
 
 private val GoalType.label: String

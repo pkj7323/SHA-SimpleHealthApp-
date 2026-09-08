@@ -1,6 +1,7 @@
 package com.pkj.leanbulk.ui
 
 import android.app.DatePickerDialog
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,7 +30,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
@@ -62,6 +62,8 @@ import kotlinx.coroutines.launch
 import com.pkj.leanbulk.data.Exercise
 import com.pkj.leanbulk.data.RoutineWithExercises
 import com.pkj.leanbulk.data.TrackingType
+import com.pkj.leanbulk.ui.theme.ShaSpacing
+import com.pkj.leanbulk.ui.theme.ShaTheme
 import java.time.LocalDate
 
 @Composable
@@ -269,18 +271,17 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
     }
 
     duplicateName?.let { routine ->
-        AlertDialog(
-            onDismissRequest = { duplicateName = null },
-            title = { Text("같은 이름의 루틴이 있습니다") },
-            text = { Text("'${routine.routine.name}'의 종목 ${routine.exercises.size}개가 지금 화면의 ${draft.size}개로 바뀝니다.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.overwriteRoutine(routine.routine.id, routine.routine.name)
-                    duplicateName = null
-                }) { Text("덮어쓰기") }
-            },
-            dismissButton = { TextButton(onClick = { duplicateName = null }) { Text("취소") } }
-        )
+        ShaDialog(
+            title = "같은 이름의 루틴이 있습니다",
+            onDismiss = { duplicateName = null },
+            confirmText = "덮어쓰기",
+            onConfirm = {
+                vm.overwriteRoutine(routine.routine.id, routine.routine.name)
+                duplicateName = null
+            }
+        ) {
+            DialogBody("'${routine.routine.name}'의 종목 ${routine.exercises.size}개가 지금 화면의 ${draft.size}개로 바뀝니다.")
+        }
     }
 
     if (showAddExercise) {
@@ -296,15 +297,14 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
     }
 
     pendingRoutine?.let { routine ->
-        AlertDialog(
-            onDismissRequest = { pendingRoutine = null },
-            title = { Text("지금 종목을 갈아엎을까요?") },
-            text = { Text("$date 의 종목 ${draft.size}개가 '${routine.routine.name}' 내용으로 바뀝니다.") },
-            confirmButton = {
-                TextButton(onClick = { vm.loadRoutine(routine); pendingRoutine = null }) { Text("불러오기") }
-            },
-            dismissButton = { TextButton(onClick = { pendingRoutine = null }) { Text("취소") } }
-        )
+        ShaDialog(
+            title = "지금 종목을 갈아엎을까요?",
+            onDismiss = { pendingRoutine = null },
+            confirmText = "불러오기",
+            onConfirm = { vm.loadRoutine(routine); pendingRoutine = null }
+        ) {
+            DialogBody("$date 의 종목 ${draft.size}개가 '${routine.routine.name}' 내용으로 바뀝니다.")
+        }
     }
 }
 
@@ -593,45 +593,53 @@ private fun RoutinePickerDialog(
     // 덮어쓰기는 되돌릴 수 없다(옛 종목 구성이 사라진다). 그래서 한 번 확인한다.
     var overwriting by remember { mutableStateOf<RoutineWithExercises?>(null) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("오늘 할 루틴 선택") },
-        text = {
-            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+    val colors = ShaTheme.colors
+    val type = ShaTheme.type
+
+    ShaDialog(title = "오늘 할 루틴 선택", onDismiss = onDismiss, dismissText = "닫기") {
+        Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 routines.forEach { item ->
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { onPick(item) }, modifier = Modifier.weight(1f)) {
-                            Column(Modifier.fillMaxWidth()) {
-                                Text(item.routine.name)
-                                Text(
-                                    "종목 ${item.exercises.size}개",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(item) }
+                            .padding(vertical = ShaSpacing.md),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(item.routine.name, style = type.bodyStrong, color = colors.ink)
+                            Text(
+                                "종목 ${item.exercises.size}개",
+                                style = type.caption,
+                                color = colors.muted
+                            )
                         }
                         // 지금 화면에 종목이 있어야 덮어쓸 내용이 있다.
                         if (canOverwrite) {
-                            TextButton(onClick = { overwriting = item }) { Text("덮어쓰기") }
+                            Text(
+                                "덮어쓰기",
+                                style = type.caption,
+                                color = colors.primary,
+                                modifier = Modifier
+                                    .clickable { overwriting = item }
+                                    .padding(ShaSpacing.md)
+                            )
                         }
                         IconButton(onClick = { editing = item.routine.id to item.routine.name }) {
-                            Icon(Icons.Filled.Edit, contentDescription = "이름 수정")
+                            Icon(Icons.Filled.Edit, contentDescription = "이름 수정", tint = colors.muted)
                         }
                         IconButton(onClick = { onDelete(item.routine.id) }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "루틴 삭제")
+                            Icon(Icons.Filled.Delete, contentDescription = "루틴 삭제", tint = colors.muted)
                         }
                     }
                 }
-                OutlinedButton(
+                DashedAddButton(
+                    text = "루틴 추가",
                     onClick = { editing = 0L to "" },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = null)
-                    Text("루틴 추가")
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } }
-    )
+                    modifier = Modifier.padding(top = ShaSpacing.md)
+                )
+        }
+    }
 
     editing?.let { (routineId, currentName) ->
         RoutineNameDialog(
@@ -646,19 +654,18 @@ private fun RoutinePickerDialog(
     }
 
     overwriting?.let { item ->
-        AlertDialog(
-            onDismissRequest = { overwriting = null },
-            title = { Text("'${item.routine.name}'을 덮어쓸까요?") },
-            text = { Text("이 루틴의 종목 ${item.exercises.size}개가 지금 화면의 구성으로 바뀝니다.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    onOverwrite(item)
-                    overwriting = null
-                    onDismiss()
-                }) { Text("덮어쓰기") }
-            },
-            dismissButton = { TextButton(onClick = { overwriting = null }) { Text("취소") } }
-        )
+        ShaDialog(
+            title = "'${item.routine.name}'을 덮어쓸까요?",
+            onDismiss = { overwriting = null },
+            confirmText = "덮어쓰기",
+            onConfirm = {
+                onOverwrite(item)
+                overwriting = null
+                onDismiss()
+            }
+        ) {
+            DialogBody("이 루틴의 종목 ${item.exercises.size}개가 지금 화면의 구성으로 바뀝니다.")
+        }
     }
 }
 
@@ -696,21 +703,15 @@ private fun RoutineNameDialog(
     onDismiss: () -> Unit
 ) {
     var name by remember { mutableStateOf(initialName) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (isNew) "루틴 추가" else "루틴 이름 수정") },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("루틴 이름") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = { TextButton(onClick = { onConfirm(name) }) { Text(if (isNew) "추가" else "저장") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
-    )
+    ShaDialog(
+        title = if (isNew) "루틴 추가" else "루틴 이름 수정",
+        onDismiss = onDismiss,
+        confirmText = if (isNew) "추가" else "저장",
+        confirmEnabled = name.isNotBlank(),
+        onConfirm = { onConfirm(name) }
+    ) {
+        ShaTextField(label = "루틴 이름", value = name, onValueChange = { name = it })
+    }
 }
 
 /**
@@ -746,17 +747,18 @@ private fun ExercisePickerDialog(
         return
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("종목 추가") },
-        text = {
-            Column {
-                OutlinedTextField(
+    ShaDialog(
+        title = "종목 추가",
+        onDismiss = onDismiss,
+        dismissText = "닫기",
+        confirmText = "직접 추가",
+        onConfirm = { creating = true }
+    ) {
+                ShaTextField(
+                    label = "",
                     value = query,
                     onValueChange = { query = it },
-                    label = { Text("종목 검색") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    placeholder = "종목 검색"
                 )
 
                 LazyRow(
@@ -780,30 +782,39 @@ private fun ExercisePickerDialog(
                 }
 
                 if (filtered.isEmpty()) {
-                    Text("찾는 종목이 없습니다. 아래에서 직접 추가하세요.")
+                    DialogBody("찾는 종목이 없습니다. 아래 \"직접 추가\"로 만드세요.")
                 } else {
                     LazyColumn(Modifier.heightIn(max = 320.dp)) {
                         items(filtered, key = { it.id }) { exercise ->
-                            TextButton(
-                                onClick = { onPick(exercise) },
-                                modifier = Modifier.fillMaxWidth()
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onPick(exercise) }
+                                    .padding(vertical = ShaSpacing.md)
                             ) {
-                                Column(Modifier.fillMaxWidth()) {
-                                    Text(exercise.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(
-                                        "${exercise.bodyPart} · ${exercise.equipment} · ${exercise.trackingType.label}",
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
+                                Text(
+                                    exercise.name,
+                                    style = ShaTheme.type.bodyStrong,
+                                    color = ShaTheme.colors.ink,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    "${exercise.bodyPart} · ${exercise.equipment} · ${exercise.trackingType.label}",
+                                    style = ShaTheme.type.caption,
+                                    color = ShaTheme.colors.muted
+                                )
                             }
                         }
                     }
                 }
-            }
-        },
-        confirmButton = { TextButton(onClick = { creating = true }) { Text("직접 추가") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("닫기") } }
-    )
+    }
+}
+
+/** 다이얼로그 본문 한 줄. 색·크기를 매번 적지 않게 묶어둔다. */
+@Composable
+private fun DialogBody(text: String) {
+    Text(text, style = ShaTheme.type.body, color = ShaTheme.colors.bodyText)
 }
 
 /** 카탈로그에 없는 종목을 등록한다. 추적 방식을 고르는 게 핵심이다. */
@@ -819,20 +830,17 @@ private fun NewExerciseDialog(
     var equipment by remember { mutableStateOf("기타") }
     var trackingType by remember { mutableStateOf(TrackingType.WEIGHT_REPS) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("종목 직접 추가") },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("종목 이름") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+    ShaDialog(
+        title = "종목 직접 추가",
+        onDismiss = onDismiss,
+        confirmText = "추가",
+        confirmEnabled = name.isNotBlank(),
+        onConfirm = { onConfirm(name, bodyPart, equipment, trackingType) }
+    ) {
+        Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                ShaTextField(label = "종목 이름", value = name, onValueChange = { name = it })
 
-                Text("부위", modifier = Modifier.padding(top = 12.dp))
+                DialogLabel("부위")
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(bodyParts.ifEmpty { listOf("기타") }) { part ->
                         FilterChip(
@@ -843,7 +851,7 @@ private fun NewExerciseDialog(
                     }
                 }
 
-                Text("기구", modifier = Modifier.padding(top = 12.dp))
+                DialogLabel("기구")
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(EQUIPMENTS) { item ->
                         FilterChip(
@@ -854,24 +862,30 @@ private fun NewExerciseDialog(
                     }
                 }
 
-                Text("무엇으로 재나요", modifier = Modifier.padding(top = 12.dp))
+                DialogLabel("무엇으로 재나요")
                 Column {
                     TrackingType.entries.forEach { type ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier.fillMaxWidth().clickable { trackingType = type },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             RadioButton(selected = trackingType == type, onClick = { trackingType = type })
-                            Text(type.label)
+                            Text(type.label, style = ShaTheme.type.body, color = ShaTheme.colors.ink)
                         }
                     }
                 }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = name.isNotBlank(),
-                onClick = { onConfirm(name, bodyPart, equipment, trackingType) }
-            ) { Text("추가") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
+        }
+    }
+}
+
+/** 다이얼로그 안 작은 제목. 라벨은 항상 작고 흐리게 — 값이 주인공이다. */
+@Composable
+private fun DialogLabel(text: String) {
+    Text(
+        text,
+        style = ShaTheme.type.caption,
+        color = ShaTheme.colors.muted,
+        modifier = Modifier.padding(top = ShaSpacing.lg, bottom = ShaSpacing.sm)
     )
 }
 

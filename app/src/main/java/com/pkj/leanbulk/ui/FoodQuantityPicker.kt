@@ -2,6 +2,7 @@ package com.pkj.leanbulk.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,7 +18,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -43,6 +43,8 @@ import androidx.compose.ui.unit.dp
 import com.pkj.leanbulk.data.AmountUnit
 import com.pkj.leanbulk.data.FoodItem
 import com.pkj.leanbulk.data.Macros
+import com.pkj.leanbulk.ui.theme.ShaSpacing
+import com.pkj.leanbulk.ui.theme.ShaTheme
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -129,21 +131,13 @@ fun FoodQuantityPickerDialog(
         return
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("음식 추가") },
-        text = {
-            Column {
-                TabRow(selectedTabIndex = tab.ordinal) {
-                    FoodPickerTab.entries.forEach { t ->
-                        Tab(
-                            selected = tab == t,
-                            onClick = { tab = t },
-                            text = { Text(t.label) },
-                            modifier = Modifier.testTag("food_tab_${t.name}")
-                        )
-                    }
-                }
+    ShaDialog(title = "음식 추가", onDismiss = onDismiss, dismissText = "닫기") {
+                SubTabBar(
+                    tabs = FoodPickerTab.entries.map { it.label },
+                    selected = tab.ordinal,
+                    onSelect = { tab = FoodPickerTab.entries[it] },
+                    modifier = Modifier.testTag("food_tab_bar")
+                )
                 when (tab) {
                     FoodPickerTab.SEARCH -> SearchFoodTab(
                         foods = foods,
@@ -160,10 +154,7 @@ fun FoodQuantityPickerDialog(
                         onEdit = { editing = it }
                     )
                 }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } }
-    )
+    }
 }
 
 @Composable
@@ -183,20 +174,23 @@ private fun SearchFoodTab(
     var confirmDelete by remember { mutableStateOf(false) }
 
     if (confirmDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text("음식 ${picked.size}개를 지울까요?") },
-            text = { Text("음식 목록에서만 없어집니다. 이미 기록한 끼니는 그대로 남습니다.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    onDeleteFoods(picked.toList())
-                    picked.clear()
-                    selecting = false
-                    confirmDelete = false
-                }) { Text("지우기") }
-            },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("취소") } }
-        )
+        ShaDialog(
+            title = "음식 ${picked.size}개를 지울까요?",
+            onDismiss = { confirmDelete = false },
+            confirmText = "지우기",
+            onConfirm = {
+                onDeleteFoods(picked.toList())
+                picked.clear()
+                selecting = false
+                confirmDelete = false
+            }
+        ) {
+            Text(
+                "음식 목록에서만 없어집니다. 이미 기록한 끼니는 그대로 남습니다.",
+                style = ShaTheme.type.body,
+                color = ShaTheme.colors.bodyText
+            )
+        }
     }
     // "일반 검색"과 "AI 검색" 중 고른다. AI 검색은 아직 백엔드가 없어 안내만 뜬다(§9.5).
     var aiSearch by remember { mutableStateOf(false) }
@@ -272,7 +266,7 @@ private fun SearchFoodTab(
             (category == null || it.category == category) && it.name.contains(query, ignoreCase = true)
         }
 
-        LazyColumn(Modifier.heightIn(max = 320.dp)) {
+        LazyColumn(Modifier.heightIn(max = 240.dp)) {
             // 검색 결과 맨 위에 고정 — 찾는 음식이 카탈로그에 없을 때 바로 등록하러 간다(§9.6).
             if (!selecting) item {
                 Row(
@@ -407,35 +401,35 @@ fun FoodQuantityDialog(
     val macros = remember(multiplier) { food.macros.scaledBy(multiplier) }
     val amount = remember(multiplier) { food.baseAmount?.times(multiplier) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(food.name) },
-        text = {
-            Column {
-                NumberStepper(
-                    description = "배수",
-                    value = multiplier,
-                    step = 0.5,
-                    modifier = Modifier.fillMaxWidth()
-                ) { multiplier = it.coerceAtLeast(0.5) }
+    ShaDialog(
+        title = food.name,
+        onDismiss = onDismiss,
+        confirmText = "추가",
+        onConfirm = { onConfirm(multiplier) }
+    ) {
+        NumberStepper(
+            description = "배수",
+            value = multiplier,
+            step = 0.5,
+            modifier = Modifier.fillMaxWidth()
+        ) { multiplier = it.coerceAtLeast(0.5) }
 
-                amount?.let {
-                    Text(
-                        "${it.roundToInt()}${food.baseAmountUnit.label}",
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 8.dp).testTag("food_quantity_gram")
-                    )
-                }
-                Text(
-                    formatMacroSummary(macros),
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 4.dp).testTag("food_quantity_macros")
-                )
-            }
-        },
-        confirmButton = { TextButton(onClick = { onConfirm(multiplier) }) { Text("추가") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
-    )
+        // 담을 양이 이 창의 결론이므로 값 단계로 크게 적는다.
+        amount?.let {
+            Text(
+                "${it.roundToInt()}${food.baseAmountUnit.label}",
+                style = ShaTheme.type.data,
+                color = ShaTheme.colors.ink,
+                modifier = Modifier.padding(top = ShaSpacing.lg).testTag("food_quantity_gram")
+            )
+        }
+        Text(
+            formatMacroSummary(macros),
+            style = ShaTheme.type.caption,
+            color = ShaTheme.colors.muted,
+            modifier = Modifier.padding(top = ShaSpacing.xs).testTag("food_quantity_macros")
+        )
+    }
 }
 
 /**
@@ -461,25 +455,36 @@ private fun FoodFormDialog(
     var baseAmount by remember { mutableStateOf(initial?.baseAmount) }
     var unit by remember { mutableStateOf(initial?.baseAmountUnit ?: AmountUnit.G) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                OutlinedTextField(
+    ShaDialog(
+        title = title,
+        onDismiss = onDismiss,
+        confirmText = confirmText,
+        confirmEnabled = name.isNotBlank(),
+        onConfirm = {
+            onConfirm(
+                name.trim(),
+                category.ifBlank { "기타" },
+                Macros(kcal, protein, carbs, fat, sugar),
+                baseAmount,
+                unit
+            )
+        }
+    ) {
+        Column(
+            Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(ShaSpacing.md)
+        ) {
+                ShaTextField(
+                    label = "음식 이름",
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("음식 이름") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().testTag("direct_register_name")
+                    modifier = Modifier.testTag("direct_register_name")
                 )
-                OutlinedTextField(
+                ShaTextField(
+                    label = "분류",
                     value = category,
                     onValueChange = { category = it },
-                    label = { Text("분류") },
-                    placeholder = { Text("기타") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    placeholder = "기타"
                 )
                 Row(
                     Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -518,27 +523,11 @@ private fun FoodFormDialog(
                 }
                 Text(
                     "위 영양정보가 얼마를 기준으로 한 값인지. 모르면 비워두세요 — 그때는 배수(×1, ×2)로만 담깁니다.",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 4.dp)
+                    style = ShaTheme.type.caption,
+                    color = ShaTheme.colors.muted
                 )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onConfirm(
-                        name.trim(),
-                        category.ifBlank { "기타" },
-                        Macros(kcal, protein, carbs, fat, sugar),
-                        baseAmount,
-                        unit
-                    )
-                },
-                enabled = name.isNotBlank()
-            ) { Text(confirmText) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
-    )
+        }
+    }
 }
 
 /** 모르는 값은 0이 아니라 `?`로 적는다 — 0kcal이라고 적어두면 사실이 아닌 값이 기록으로 남는다. */

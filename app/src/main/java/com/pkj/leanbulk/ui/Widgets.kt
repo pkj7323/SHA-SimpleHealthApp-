@@ -162,21 +162,15 @@ fun TextInputDialog(
     onDismiss: () -> Unit
 ) {
     var text by remember { mutableStateOf(initial) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                label = { Text(label) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = { TextButton(onClick = { onConfirm(text) }) { Text(confirmText) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
-    )
+    ShaDialog(
+        title = title,
+        onDismiss = onDismiss,
+        confirmText = confirmText,
+        onConfirm = { onConfirm(text) },
+        confirmEnabled = text.isNotBlank()
+    ) {
+        ShaTextField(label = label, value = text, onValueChange = { text = it })
+    }
 }
 
 /**
@@ -196,38 +190,25 @@ fun MemoDialog(
     onDismiss: () -> Unit
 ) {
     var text by remember { mutableStateOf(initial) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                label = { Text("메모") },
-                minLines = 3,
-                maxLines = 8,
-                modifier = Modifier.fillMaxWidth().testTag("memo_field")
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(text.trim()) },
-                modifier = Modifier.testTag("memo_save")
-            ) { Text("저장") }
-        },
-        dismissButton = {
-            Row {
-                // 이미 적어둔 게 있을 때만 보여준다. 빈 메모에 삭제 버튼은 뜻이 없다.
-                if (initial.isNotBlank()) {
-                    TextButton(
-                        onClick = { onConfirm("") },
-                        modifier = Modifier.testTag("memo_delete")
-                    ) { Text("삭제") }
-                }
-                TextButton(onClick = onDismiss) { Text("취소") }
-            }
-        }
-    )
+    ShaDialog(
+        title = title,
+        onDismiss = onDismiss,
+        confirmText = "저장",
+        onConfirm = { onConfirm(text.trim()) },
+        // 이미 적어둔 게 있을 때만 보여준다. 빈 메모에 삭제 버튼은 뜻이 없다.
+        destructiveText = if (initial.isNotBlank()) "메모 지우기" else null,
+        onDestructive = { onConfirm("") }
+    ) {
+        ShaTextField(
+            label = "",
+            value = text,
+            onValueChange = { text = it },
+            placeholder = "예: 밖에서 사 먹음",
+            singleLine = false,
+            minLines = 3,
+            modifier = Modifier.testTag("memo_field")
+        )
+    }
 }
 
 /**
@@ -242,15 +223,14 @@ fun NullableNumberField(
     onValueChange: (Double?) -> Unit
 ) {
     var text by remember(value) { mutableStateOf(value?.let(::formatNumber) ?: "") }
-    OutlinedTextField(
+    ShaTextField(
+        label = label,
         value = text,
         onValueChange = { input ->
             text = input
             if (input.isBlank()) onValueChange(null) else input.toDoubleOrNull()?.let(onValueChange)
         },
-        label = { Text(label) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardType = KeyboardType.Number,
         modifier = modifier
     )
 }
@@ -259,15 +239,14 @@ fun NullableNumberField(
 @Composable
 fun LabeledNumberField(label: String, value: Double, onValueChange: (Double) -> Unit) {
     var text by remember(value) { mutableStateOf(formatNumber(value)) }
-    OutlinedTextField(
+    ShaTextField(
+        label = label,
         value = text,
         onValueChange = { input ->
             text = input
             input.toDoubleOrNull()?.let(onValueChange)
         },
-        label = { Text(label) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardType = KeyboardType.Number,
         modifier = Modifier.fillMaxWidth()
     )
 }
