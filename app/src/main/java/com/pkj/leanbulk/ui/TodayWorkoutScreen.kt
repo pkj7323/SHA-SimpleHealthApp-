@@ -267,6 +267,7 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
             MemoDialog(
                 title = "${exercise.name} 메모",
                 initial = exercise.memo,
+                placeholder = "예: 어깨가 뻐근함, 다음엔 5kg 올리기",
                 onConfirm = { vm.setExerciseMemo(index, it); memoFor = null },
                 onDismiss = { memoFor = null }
             )

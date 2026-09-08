@@ -184,6 +184,7 @@ fun TodayDietScreen(vm: MainViewModel) {
             MemoDialog(
                 title = "${meal.slotName} 메모",
                 initial = meal.memo,
+                placeholder = "예: 밖에서 사 먹음",
                 onConfirm = { vm.setMealMemo(index, it); memoFor = null },
                 onDismiss = { memoFor = null }
             )

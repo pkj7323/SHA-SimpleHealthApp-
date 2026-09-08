@@ -187,6 +187,8 @@ fun TextInputDialog(
 fun MemoDialog(
     title: String,
     initial: String,
+    /** 빈 칸에 비쳐 보이는 예시. **부르는 쪽이 준다** — 끼니와 종목이 같은 창을 쓰기 때문이다. */
+    placeholder: String,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -204,7 +206,7 @@ fun MemoDialog(
             label = "",
             value = text,
             onValueChange = { text = it },
-            placeholder = "예: 밖에서 사 먹음",
+            placeholder = placeholder,
             singleLine = false,
             minLines = 3,
             fieldModifier = Modifier.testTag("memo_field")
