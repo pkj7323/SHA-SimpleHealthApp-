@@ -335,6 +335,29 @@ internal val MIGRATION_15_16 = Migration(15, 16) { db ->
     db.execSQL("ALTER TABLE `app_meta` ADD COLUMN `restSeconds` INTEGER NOT NULL DEFAULT 90")
 }
 
+/**
+ * 운동 시계를 **멈췄다 이어서 할 수 있게** 고친다.
+ *
+ * 예전엔 처음 시작한 시각 하나로만 경과를 재서, 종료했다 한참 뒤에 이어서 하면 그 사이
+ * 쉰 시간까지 운동 시간으로 세어졌다. 실제로 잰 구간의 합(`accumulatedMs`)과 지금 도는
+ * 구간의 시작(`resumedAtEpochMs`)으로 나눈다.
+ *
+ * 기존 행은 뜻이 그대로 옮겨진다 — 끝난 운동은 그때 잰 길이가 곧 누적이고, 돌고 있던
+ * 운동은 시작 시각이 곧 지금 구간의 시작이다.
+ */
+internal val MIGRATION_16_17 = Migration(16, 17) { db ->
+    db.execSQL("ALTER TABLE `workout_session` ADD COLUMN `accumulatedMs` INTEGER NOT NULL DEFAULT 0")
+    db.execSQL("ALTER TABLE `workout_session` ADD COLUMN `resumedAtEpochMs` INTEGER")
+    db.execSQL(
+        "UPDATE `workout_session` SET `accumulatedMs` = " +
+            "MAX(`endedAtEpochMs` - `startedAtEpochMs`, 0) WHERE `endedAtEpochMs` IS NOT NULL"
+    )
+    db.execSQL(
+        "UPDATE `workout_session` SET `resumedAtEpochMs` = `startedAtEpochMs` " +
+            "WHERE `endedAtEpochMs` IS NULL"
+    )
+}
+
 @Database(
     entities = [
         MealEntry::class,
@@ -355,7 +378,7 @@ internal val MIGRATION_15_16 = Migration(15, 16) { db ->
         AppMeta::class,
         Exercise::class
     ],
-    version = 16,
+    version = 17,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -387,11 +410,11 @@ abstract class AppDatabase : RoomDatabase() {
         internal val MIGRATIONS = arrayOf(
             MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
             MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14,
-            MIGRATION_14_15, MIGRATION_15_16
+            MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17
         )
 
         /** 마이그레이션 테스트가 참조한다. `@Database`의 version과 항상 같아야 한다. */
-        internal const val VERSION = 16
+        internal const val VERSION = 17
 
         fun get(context: Context): AppDatabase =
             instance ?: synchronized(this) {

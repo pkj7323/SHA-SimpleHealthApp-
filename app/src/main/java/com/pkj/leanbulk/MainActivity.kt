@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.pkj.leanbulk.ui.BodyRecordScreen
 import com.pkj.leanbulk.ui.ExportScreen
 import com.pkj.leanbulk.ui.HistoryScreen
+import com.pkj.leanbulk.notify.AndroidRestAlarms
 import com.pkj.leanbulk.ui.MainViewModel
 import com.pkj.leanbulk.ui.TodayDietScreen
 import com.pkj.leanbulk.ui.TodayWorkoutScreen
@@ -40,7 +41,10 @@ import com.pkj.leanbulk.ui.theme.SimpleHealthTheme
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels {
-        ViewModelFactory((application as SimpleHealthApp).repository)
+        ViewModelFactory(
+            (application as SimpleHealthApp).repository,
+            AndroidRestAlarms(this)
+        )
     }
 
     /** 백그라운드에 있는 동안 자정이 지났을 수 있으므로 돌아올 때마다 날짜를 다시 확인한다. */

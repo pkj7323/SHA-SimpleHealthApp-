@@ -383,6 +383,43 @@ class MigrationTest {
             }
     }
 
+    /**
+     * 시계를 멈췄다 이어서 할 수 있게 되면서 세션이 "누적 + 지금 구간"으로 갈렸다.
+     * 옛 행의 뜻이 그대로 옮겨져야 한다 — 끝난 운동은 그때 잰 길이가 곧 누적이고,
+     * 돌고 있던 운동은 시작 시각이 곧 지금 구간의 시작이다.
+     */
+    @Test
+    fun 옛_운동_세션이_누적_시간으로_옮겨진다() {
+        helper.createDatabase(TEST_DB, 16).use { db ->
+            db.execSQL(
+                "INSERT INTO workout_session (date, startedAtEpochMs, endedAtEpochMs) " +
+                    "VALUES ('2026-09-01', 1000000, 1003600)"
+            )
+            db.execSQL(
+                "INSERT INTO workout_session (date, startedAtEpochMs, endedAtEpochMs) " +
+                    "VALUES ('2026-09-02', 2000000, NULL)"
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, AppDatabase.VERSION, true, *AppDatabase.MIGRATIONS)
+            .use { db ->
+                db.query(
+                    "SELECT accumulatedMs, resumedAtEpochMs FROM workout_session WHERE date = '2026-09-01'"
+                ).use { c ->
+                    assertTrue(c.moveToFirst())
+                    assertEquals("끝난 운동의 길이가 누적으로 안 옮겨졌다", 3600, c.getLong(0))
+                    assertTrue("끝난 운동이 도는 중으로 바뀌었다", c.isNull(1))
+                }
+                db.query(
+                    "SELECT accumulatedMs, resumedAtEpochMs FROM workout_session WHERE date = '2026-09-02'"
+                ).use { c ->
+                    assertTrue(c.moveToFirst())
+                    assertEquals(0, c.getLong(0))
+                    assertEquals("돌고 있던 운동의 구간 시작이 비었다", 2000000, c.getLong(1))
+                }
+            }
+    }
+
     @Test
     fun 선언한_버전과_실제_DB_버전이_같다() {
         val db = helper.createDatabase(TEST_DB, AppDatabase.VERSION)

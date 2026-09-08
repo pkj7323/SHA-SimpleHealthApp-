@@ -4,6 +4,19 @@
     <!-- 휴식 타이머가 끝났을 때 알린다. 헬스장에서 알림음은 민폐라 진동만 쓴다. -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- 휴식이 끝나면 다른 앱을 보고 있어도 알림창에 올린다. 13부터는 사용자가 켜줘야 한다. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+      타이머는 제 시각에 울려야 뜻이 있다(1분 늦게 울리는 휴식 알림은 알림이 아니다).
+      USE_EXACT_ALARM은 알람·타이머가 본업인 앱에 주어지고 깔 때 바로 켜진다.
+      12 이하에서는 그게 없어서 SCHEDULE_EXACT_ALARM으로 받는다.
+    -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+
     <application
         android:name=".SimpleHealthApp"
         android:allowBackup="true"
@@ -23,6 +36,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 휴식이 끝나는 시각에 시스템이 깨워주는 자리. 앱이 죽어 있어도 온다. -->
+        <receiver
+            android:name=".notify.RestAlarmReceiver"
+            android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

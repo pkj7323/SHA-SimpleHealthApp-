@@ -105,6 +105,15 @@ data class WorkoutDayDto(
      * 시간대가 다른 기기에서 열어도 그날 기록으로 남아야 하므로 날짜([date])와 함께 읽는다.
      */
     val startedAt: Long? = null,
+    /**
+     * 멈춘 구간을 뺀 실제 운동 시간(밀리초)과, 지금 도는 구간의 시작 시각.
+     *
+     * 시계를 멈췄다 이어서 할 수 있게 되기 전 백업엔 없다. 그때는 시작~종료가 곧 운동
+     * 시간이었으므로 [startedAt]·[endedAt]에서 그대로 계산해 채운다.
+     */
+    val accumulatedMs: Long? = null,
+    val resumedAt: Long? = null,
+    /** 마지막으로 멈춘 시각. */
     val endedAt: Long? = null
 )
 

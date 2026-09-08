@@ -198,9 +198,11 @@ class SnapshotRoundTripTest {
         val ended = requireNotNull(db.workoutDao().session("2026-08-30"))
         assertEquals(1_756_500_000_000, ended.startedAtEpochMs)
         assertEquals(1_756_504_200_000, ended.endedAtEpochMs)
+        assertEquals("실제로 잰 시간이 안 넘어왔다", 4_200_000L, ended.accumulatedMs)
 
         val running = requireNotNull(db.workoutDao().session("2026-08-31"))
         assertNull("안 끝낸 운동에 끝난 시각이 생겼다", running.endedAtEpochMs)
+        assertEquals(1_756_600_000_000, running.resumedAtEpochMs)
 
         // 시작조차 안 한 날은 세션이 없어야 한다 — 없던 사실을 만들지 않는다.
         assertNull(db.workoutDao().session("2026-09-01"))
@@ -293,10 +295,19 @@ class SnapshotRoundTripTest {
         // 운동 시간. 종목이 있는 날 하나(끝낸 것)와 종목 없이 시작만 한 날 하나 —
         // 뒤엣것은 종목 쪽 날짜만 훑으면 백업에서 통째로 빠진다.
         db.workoutDao().upsertSession(
-            WorkoutSession("2026-08-30", startedAtEpochMs = 1_756_500_000_000, endedAtEpochMs = 1_756_504_200_000)
+            WorkoutSession(
+                "2026-08-30",
+                startedAtEpochMs = 1_756_500_000_000,
+                accumulatedMs = 4_200_000,
+                endedAtEpochMs = 1_756_504_200_000
+            )
         )
         db.workoutDao().upsertSession(
-            WorkoutSession("2026-08-31", startedAtEpochMs = 1_756_600_000_000)
+            WorkoutSession(
+                "2026-08-31",
+                startedAtEpochMs = 1_756_600_000_000,
+                resumedAtEpochMs = 1_756_600_000_000
+            )
         )
 
         // orderIndex에 일부러 구멍을 낸다. 불러올 때 0,1,2로 다시 매겨지면 이 테스트가 잡아낸다.

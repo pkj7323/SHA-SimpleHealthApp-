@@ -3,6 +3,7 @@ package com.pkj.leanbulk.ui
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pkj.leanbulk.data.WorkoutSession
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -25,15 +26,36 @@ class RestTimerTest {
         assertEquals(0, timer.remainingSec(t0 + 120_000))
     }
 
-    /** 아직 안 끝난 운동은 지금까지, 끝낸 운동은 끝낸 시각까지만 센다. */
+    /** 도는 중이면 지금까지, 멈춰 있으면 멈춘 그 순간까지만 센다. */
     @Test
-    fun 운동_경과_시간은_끝냈으면_거기서_멈춘다() {
-        val running = WorkoutSession("2026-09-08", startedAtEpochMs = t0)
+    fun 운동_경과_시간은_멈추면_거기서_선다() {
+        val running = WorkoutSession("2026-09-08", startedAtEpochMs = t0, resumedAtEpochMs = t0)
         assertEquals(3_600_000, running.elapsedMs(t0 + 3_600_000))
 
-        val ended = running.copy(endedAtEpochMs = t0 + 3_600_000)
-        assertEquals(3_600_000, ended.elapsedMs(t0 + 7_200_000))
-        assertEquals(false, ended.running)
+        val paused = running.pausedAt(t0 + 3_600_000)
+        assertEquals(3_600_000, paused.elapsedMs(t0 + 7_200_000))
+        assertEquals(false, paused.running)
+        assertEquals(3_600_000L, paused.finishedMs)
+    }
+
+    /**
+     * **멈춰 있던 시간은 운동 시간이 아니다.**
+     *
+     * 예전엔 처음 시작한 시각 하나로만 경과를 재서, 30분 하고 멈춘 뒤 두 시간 있다가
+     * 이어서 하면 곧바로 2시간 30분으로 뛰었다. 이어서 하면 이미 잰 30분에서 이어져야 한다.
+     */
+    @Test
+    fun 멈춘_동안은_운동_시간에_안_들어간다() {
+        val session = WorkoutSession("2026-09-08", startedAtEpochMs = t0, resumedAtEpochMs = t0)
+            .pausedAt(t0 + 30 * 60_000)
+            .resumedAt(t0 + 150 * 60_000) // 두 시간 놀다 이어서
+
+        assertEquals("이어서 한 직후엔 멈출 때 그대로여야 한다", 30 * 60_000L, session.elapsedMs(t0 + 150 * 60_000))
+        assertEquals(31 * 60_000L, session.elapsedMs(t0 + 151 * 60_000))
+        // 처음 시작한 시각은 기록이라 이어서 해도 안 바뀐다.
+        assertEquals(t0, session.startedAtEpochMs)
+        // 도는 중엔 "그날 몇 분 했다"를 아직 말할 수 없다.
+        assertNull(session.finishedMs)
     }
 
     /** 시계는 한 시간을 넘길 때만 시간 자리를 붙인다. `83:20`으로는 몇 분인지 안 읽힌다. */

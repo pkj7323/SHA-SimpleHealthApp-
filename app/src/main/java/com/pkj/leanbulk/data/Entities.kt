@@ -375,23 +375,49 @@ data class Exercise(
 @Entity(tableName = "workout_session")
 data class WorkoutSession(
     @PrimaryKey val date: String,
+    /**
+     * **처음** 시작을 누른 시각. "몇 시에 운동을 시작했나"라는 기록이라 멈췄다 이어서 해도
+     * 안 바뀐다. 경과 시간을 이걸로 재면 안 된다 — 쉰 시간까지 같이 세어진다.
+     */
     val startedAtEpochMs: Long,
-    /** 아직 안 끝냈으면 null. 끝낸 뒤 다시 시작하면 다시 null이 된다. */
+    /**
+     * 멈춰 있던 구간까지 빼고 **실제로 잰 시간의 합**(밀리초).
+     *
+     * 멈출 때 그 구간 길이를 여기 더하고, 이어서 할 땐 [resumedAtEpochMs]만 새로 잡는다.
+     * 이렇게 안 하면 잠깐 멈춰 두고 한 시간 뒤에 이어서 했을 때 그 한 시간이 운동 시간이 된다.
+     */
+    @ColumnInfo(defaultValue = "0") val accumulatedMs: Long = 0,
+    /** 지금 도는 구간이 시작된 시각. **null이면 멈춰 있는 것**이다. */
+    val resumedAtEpochMs: Long? = null,
+    /** 마지막으로 멈춘 시각. 이어서 하면 다시 null이 된다. */
     val endedAtEpochMs: Long? = null
 ) {
-    val running: Boolean get() = endedAtEpochMs == null
+    val running: Boolean get() = resumedAtEpochMs != null
 
-    /** [nowEpochMs] 기준 경과 시간(밀리초). 끝난 운동은 끝난 시각까지만 센다. */
+    /** [nowEpochMs] 기준 지금까지 잰 시간(밀리초). 멈춰 있으면 [accumulatedMs] 그대로다. */
     fun elapsedMs(nowEpochMs: Long): Long =
-        ((endedAtEpochMs ?: nowEpochMs) - startedAtEpochMs).coerceAtLeast(0)
+        accumulatedMs + (resumedAtEpochMs?.let { (nowEpochMs - it).coerceAtLeast(0) } ?: 0)
 
     /**
-     * 끝낸 운동의 총 시간(밀리초). 아직 도는 중이면 null이다.
+     * 멈춰 있는 운동의 총 시간(밀리초). 도는 중이면 null이다.
      *
      * "지금까지 몇 분"과 "그날 몇 분 했다"는 다른 질문이다. 지난 기록을 훑는 화면에서
      * 볼 때마다 늘어나는 숫자를 기록처럼 보여주면 안 되므로 여기서 갈라둔다.
      */
-    val finishedMs: Long? get() = endedAtEpochMs?.let { (it - startedAtEpochMs).coerceAtLeast(0) }
+    val finishedMs: Long? get() = if (running) null else accumulatedMs
+
+    /** 지금 시각 기준으로 시계를 멈춘 상태. 돌고 있던 구간을 [accumulatedMs]에 접어 넣는다. */
+    fun pausedAt(nowEpochMs: Long): WorkoutSession = copy(
+        accumulatedMs = elapsedMs(nowEpochMs),
+        resumedAtEpochMs = null,
+        endedAtEpochMs = nowEpochMs
+    )
+
+    /** 지금 시각부터 다시 센다. 이미 잰 시간([accumulatedMs])은 그대로 두고 이어 붙인다. */
+    fun resumedAt(nowEpochMs: Long): WorkoutSession = copy(
+        resumedAtEpochMs = nowEpochMs,
+        endedAtEpochMs = null
+    )
 }
 
 /** 하루 운동에 포함된 종목 하나. 세트는 workout_set 테이블에 따로 저장된다. */

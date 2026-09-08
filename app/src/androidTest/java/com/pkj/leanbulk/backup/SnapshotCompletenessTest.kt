@@ -77,7 +77,9 @@ class SnapshotCompletenessTest {
             "macros", "macroSource"
         )
         assertFields<AppMeta>("id", "seedVersion", "restSeconds")
-        assertFields<WorkoutSession>("date", "startedAtEpochMs", "endedAtEpochMs")
+        assertFields<WorkoutSession>(
+            "date", "startedAtEpochMs", "accumulatedMs", "resumedAtEpochMs", "endedAtEpochMs"
+        )
         assertFields<Exercise>(
             "id", "slug", "name", "bodyPart", "equipment", "trackingType", "source"
         )

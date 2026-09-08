@@ -23,6 +23,8 @@ import com.pkj.leanbulk.data.backup.ExerciseDto
 import com.pkj.leanbulk.data.backup.FoodDto
 import com.pkj.leanbulk.data.backup.RoutineDto
 import com.pkj.leanbulk.data.backup.Snapshot
+import com.pkj.leanbulk.notify.NoRestAlarms
+import com.pkj.leanbulk.notify.RestAlarms
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,7 +46,11 @@ private val TIME_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 /** 편집이 멈춘 뒤 이만큼 지나면 저장한다. */
 private const val SAVE_DELAY_MS = 700L
 
-class MainViewModel(private val repository: Repository) : ViewModel() {
+class MainViewModel(
+    private val repository: Repository,
+    /** 휴식 끝을 알려줄 물건. 앱이 뒤에 있거나 죽어도 울려야 해서 시스템 알람에 맡긴다. */
+    private val restAlarms: RestAlarms = NoRestAlarms
+) : ViewModel() {
 
     /** 자정을 넘기거나 앱이 다시 앞으로 나올 때마다 갱신되는 "오늘". */
     private val _today = MutableStateFlow(LocalDate.now().format(DATE_FMT))
@@ -105,10 +111,6 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
      */
     private val _now = MutableStateFlow(System.currentTimeMillis())
     val now: StateFlow<Long> = _now
-
-    /** 휴식이 막 끝났다는 신호. 화면이 받아서 진동을 울리고 [consumeRestDone]으로 지운다. */
-    private val _restDone = MutableStateFlow(false)
-    val restDone: StateFlow<Boolean> = _restDone
 
     /**
      * 시계를 계속 세야 하는지.
@@ -404,33 +406,33 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
     // ---------- 운동 시간 ----------
 
     /**
-     * 운동을 시작한다. 이미 끝낸 날에 다시 누르면 **시작 시각은 그대로 두고 끝 표시만 뗀다** —
-     * 몇 시에 시작했는지는 기록이라 다시 쓰지 않는다.
+     * 운동을 시작하거나, 멈춰 둔 것을 이어서 한다.
+     *
+     * 이어서 할 땐 **멈춰 있던 시간은 안 센다** — 지금부터 새 구간을 시작하고 이미 잰 시간에
+     * 이어 붙인다([WorkoutSession.resumedAt]). 처음 시작한 시각은 기록이라 다시 쓰지 않는다.
      */
     fun startWorkout() {
         val date = _workoutDate.value
         viewModelScope.launch {
+            val now = System.currentTimeMillis()
             val existing = repository.workoutSession(date)
             repository.saveWorkoutSession(
-                WorkoutSession(
-                    date = date,
-                    startedAtEpochMs = existing?.startedAtEpochMs ?: System.currentTimeMillis(),
-                    endedAtEpochMs = null
-                )
+                existing?.resumedAt(now)
+                    ?: WorkoutSession(date = date, startedAtEpochMs = now, resumedAtEpochMs = now)
             )
             workoutRunning.value = true
             ensureTicker()
         }
     }
 
-    /** 운동을 끝낸다. 돌고 있던 휴식도 같이 접는다 — 끝냈는데 쉬라고 세고 있을 이유가 없다. */
+    /** 운동 시계를 멈춘다. 돌고 있던 휴식도 같이 접는다 — 멈췄는데 쉬라고 세고 있을 이유가 없다. */
     fun endWorkout() {
         val date = _workoutDate.value
         viewModelScope.launch {
             val existing = repository.workoutSession(date) ?: return@launch
-            repository.saveWorkoutSession(existing.copy(endedAtEpochMs = System.currentTimeMillis()))
+            repository.saveWorkoutSession(existing.pausedAt(System.currentTimeMillis()))
             workoutRunning.value = false
-            _restTimer.value = null
+            skipRest()
         }
     }
 
@@ -438,11 +440,13 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
 
     private fun startRest(exerciseName: String) {
         val seconds = _restSeconds.value
+        val endsAt = System.currentTimeMillis() + seconds * 1000L
         _restTimer.value = RestTimer(
             exerciseName = exerciseName,
-            endsAtEpochMs = System.currentTimeMillis() + seconds * 1000L,
+            endsAtEpochMs = endsAt,
             totalSec = seconds
         )
+        restAlarms.schedule(endsAt, exerciseName)
         ensureTicker()
     }
 
@@ -463,24 +467,24 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
             skipRest()
             return
         }
+        val endsAt = System.currentTimeMillis() + newRemaining * 1000L
         _restTimer.value = timer.copy(
-            endsAtEpochMs = System.currentTimeMillis() + newRemaining * 1000L,
+            endsAtEpochMs = endsAt,
             totalSec = maxOf(timer.totalSec, newRemaining)
         )
+        // 알람도 같이 옮긴다. 안 그러면 화면은 1:50인데 30초 뒤에 울린다.
+        restAlarms.schedule(endsAt, timer.exerciseName)
     }
 
     /** 휴식을 그만둔다. 다 쉬었든 안 쉬었든 화면에서 치우는 건 같은 일이다. */
     fun skipRest() {
         _restTimer.value = null
+        restAlarms.cancel()
     }
 
     /** 창을 내려도 타이머는 계속 돈다 — 접는 건 보기 싫다는 뜻이지 그만두겠다는 뜻이 아니다. */
     fun setRestExpanded(expanded: Boolean) {
         _restTimer.value = _restTimer.value?.copy(expanded = expanded)
-    }
-
-    fun consumeRestDone() {
-        _restDone.value = false
     }
 
     /**
@@ -494,11 +498,11 @@ class MainViewModel(private val repository: Repository) : ViewModel() {
                 val nowMs = System.currentTimeMillis()
                 _now.value = nowMs
 
+                // 다 쉬었으면 화면에서만 치운다. **알리는 건 여기서 안 한다** —
+                // 앱이 뒤에 있으면 이 코루틴은 돌지도 않으므로, 울리는 일은 전부
+                // 시스템 알람([RestAlarms])이 맡는다. 여기서 또 울리면 두 번 울린다.
                 val timer = _restTimer.value
-                if (timer != null && nowMs >= timer.endsAtEpochMs) {
-                    _restTimer.value = null
-                    _restDone.value = true
-                }
+                if (timer != null && nowMs >= timer.endsAtEpochMs) _restTimer.value = null
 
                 if (_restTimer.value == null && !workoutRunning.value) break
                 delay(1000)

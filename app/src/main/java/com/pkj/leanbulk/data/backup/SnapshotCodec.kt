@@ -120,6 +120,8 @@ object SnapshotCodec {
                 WorkoutDayDto(
                     date = date,
                     startedAt = session?.startedAtEpochMs,
+                    accumulatedMs = session?.accumulatedMs,
+                    resumedAt = session?.resumedAtEpochMs,
                     endedAt = session?.endedAtEpochMs,
                     exercises = list.sortedBy { it.exercise.orderIndex }.map { ews ->
                         WorkoutExerciseDto(
@@ -142,8 +144,16 @@ object SnapshotCodec {
     }
 
     /** 시작 시각이 실려 있는 날만 세션 한 줄이 된다. 없으면 그날은 타이머를 안 쓴 것이다. */
-    fun WorkoutDayDto.toSession(): WorkoutSession? = startedAt?.let {
-        WorkoutSession(date = date, startedAtEpochMs = it, endedAtEpochMs = endedAt)
+    fun WorkoutDayDto.toSession(): WorkoutSession? = startedAt?.let { started ->
+        WorkoutSession(
+            date = date,
+            startedAtEpochMs = started,
+            // 옛 백업(멈춤이 없던 시절)엔 누적이 없다. 그때는 시작~종료가 곧 운동 시간이었다.
+            accumulatedMs = accumulatedMs ?: endedAt?.let { (it - started).coerceAtLeast(0) } ?: 0,
+            // 도는 중이던 기록도 같은 규칙으로 읽는다 — 끝난 표시가 없으면 시작이 곧 구간 시작.
+            resumedAtEpochMs = resumedAt ?: started.takeIf { accumulatedMs == null && endedAt == null },
+            endedAtEpochMs = endedAt
+        )
     }
 
     fun RoutineWithExercises.toDto(slugById: Map<Long, String>) = RoutineDto(
