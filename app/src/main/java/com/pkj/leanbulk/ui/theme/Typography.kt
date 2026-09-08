@@ -1,21 +1,33 @@
 package com.pkj.leanbulk.ui.theme
 
 import androidx.compose.material3.Typography
+import com.pkj.leanbulk.R
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /**
- * 본문 글꼴.
+ * 본문 글꼴 — Pretendard.
  *
- * 명령서는 Pretendard를 쓰라고 하지만 **`res/font/`에 폰트 파일이 아직 없다.** 여기만
- * `FontFamily(Font(R.font.pretendard_...))`로 바꾸면 전체가 따라 바뀐다 — 화면 코드는
- * 글꼴을 직접 안 잡으므로 이 한 줄이 전부다.
+ * 시스템 글꼴을 쓰면 **기기마다 다르게 보인다**(삼성은 One UI Sans, 픽셀은 Noto Sans KR).
+ * 글꼴을 앱에 넣으면 어디서나 같은 화면이 된다.
+ *
+ * 굵기를 다섯 벌 다 넣는다. 셋만 넣고 나머지를 근사시키면 [ShaTypography]의 단계가
+ * 뭉개져서, 값(Bold)과 큰 숫자(ExtraBold)가 구분이 안 된다.
+ *
+ * 라이선스는 SIL OFL이고 전문은 `assets/licenses/pretendard-ofl.txt`에 같이 넣어 배포한다.
  */
-private val ShaFontFamily = FontFamily.Default
+private val ShaFontFamily = FontFamily(
+    Font(R.font.pretendard_regular, FontWeight.Normal),
+    Font(R.font.pretendard_medium, FontWeight.Medium),
+    Font(R.font.pretendard_semibold, FontWeight.SemiBold),
+    Font(R.font.pretendard_bold, FontWeight.Bold),
+    Font(R.font.pretendard_extrabold, FontWeight.ExtraBold)
+)
 
 /**
  * 숫자는 **등폭(tabular)** 으로 그린다.

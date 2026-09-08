@@ -155,6 +155,8 @@ fun SettingsScreen(vm: MainViewModel) {
                     style = type.caption,
                     color = colors.muted
                 )
+                // OFL은 글꼴을 함께 배포할 때 라이선스 고지를 요구한다. 전문은 assets에 넣어 둔다.
+                Text("글꼴 Pretendard (SIL OFL 1.1)", style = type.caption, color = colors.muted)
             }
         }
 
