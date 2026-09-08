@@ -32,8 +32,9 @@ fun SimpleHealthTheme(
 
     val material = if (darkTheme) {
         darkColorScheme(
-            primary = sha.primary,
-            onPrimary = sha.canvas,
+            // 채워지는 버튼은 라임 + 잉크 글자다. `onPrimary`에 흰색을 두면 대비 1.6:1이 된다.
+            primary = sha.primaryFill,
+            onPrimary = sha.onPrimaryFill,
             secondary = sha.primaryWeakFg,
             background = sha.surface,
             onBackground = sha.ink,
@@ -53,8 +54,9 @@ fun SimpleHealthTheme(
         )
     } else {
         lightColorScheme(
-            primary = sha.primary,
-            onPrimary = sha.canvas,
+            // 채워지는 버튼은 라임 + 잉크 글자다. `onPrimary`에 흰색을 두면 대비 1.6:1이 된다.
+            primary = sha.primaryFill,
+            onPrimary = sha.onPrimaryFill,
             secondary = sha.primaryWeakFg,
             background = sha.surface,
             onBackground = sha.ink,

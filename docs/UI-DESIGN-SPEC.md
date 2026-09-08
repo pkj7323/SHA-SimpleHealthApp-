@@ -1,6 +1,6 @@
 # SHA 디자인 적용 명령서
 
-이 문서는 SHA(린매스업 트래커, `app/src/main/java/com/pkj/leanbulk`) 앱의 UI를
+이 문서는 SHA(심플 헬스 앱, `app/src/main/java/com/pkj/leanbulk`) 앱의 UI를
 승인된 목업 디자인대로 Jetpack Compose로 옮기기 위한 작업 지시서다.
 느낌이 아니라 이 문서에 적힌 값을 그대로 코드에 넣으면 된다.
 
@@ -24,24 +24,42 @@
 ## 1. 디자인 토큰
 
 ```kotlin
-// ui/theme/Color.kt
-object ShaColors {
-    val Canvas = Color(0xFFFFFFFF)
-    val Surface = Color(0xFFF2F4F6)       // 화면 배경
-    val SurfaceRaised = Color(0xFFFFFFFF) // 카드 배경
-    val Border = Color(0xFFE5E8EB)
-    val BorderStrong = Color(0xFFD1D6DB)  // 인풋 테두리, 점선
-    val Muted = Color(0xFF8B95A1)
-    val BodyText = Color(0xFF4E5968)
-    val Ink = Color(0xFF191F28)
-    val Primary = Color(0xFF3182F6)
-    val PrimaryHover = Color(0xFF2272EB)
-    val PrimaryWeakBg = Color(0xFFE8F3FF)
-    val PrimaryWeakFg = Color(0xFF1B64DA)
-    val Success = Color(0xFF06B26B)
-    val Danger = Color(0xFFE42939)
-}
+// ui/theme/Color.kt  — 실제 값은 코드가 기준. 여기는 근거를 적어둔다.
+//
+// 브랜드색은 런처 아이콘의 라임 #6FE26C 다. 토스 파랑에서 갈아탔다.
+//
+// **라임은 글자 색으로 못 쓴다.** 흰 바탕 위 라임 글자도, 라임 위 흰 글자도 1.6:1이라
+// (기준 4.5:1) 사실상 안 보인다. 그래서 역할을 둘로 가른다:
+//
+//   primaryFill  = 라임 #6FE26C   채우는 데만 (버튼·진행막대·선택칩). 위 글자는 잉크  → 11.1:1
+//   primary      = 딥그린 #2E7D32  글자·아이콘용 (링크, 강조 텍스트)                 →  5.1:1
+//
+// 어두운 테마에서는 라임이 바탕과 11:1이라 글자로도 쓸 수 있어서 둘이 같아진다.
+//
+// 중립색은 파랑기를 빼고 살짝 따뜻하게 민다. 파랑 회색은 라임 옆에 두면 서로 튄다.
 
+밝은 테마
+  canvas #FFFFFF · surface #F4F5F2 · surfaceRaised #FFFFFF
+  border #E6E8E3 · borderStrong #D2D5CD
+  muted #6E7269 · bodyText #4E5348 · ink #16150F
+  primary #2E7D32 · primaryFill #6FE26C · onPrimaryFill #16150F
+  primaryWeakBg #E8F8E7 · primaryWeakFg #2E7D32
+  success #2E7D32 · danger #D32F2F
+
+어두운 테마
+  canvas #16150F · surface #16150F · surfaceRaised #22211B
+  border #2E2D26 · borderStrong #3D3C33
+  muted #8E938A · bodyText #B9BDB3 · ink #F4F5F2
+  primary #6FE26C · primaryFill #6FE26C · onPrimaryFill #16150F
+  primaryWeakBg #1D2A1C · primaryWeakFg #6FE26C
+  success #6FE26C · danger #FF6B70
+```
+
+**색을 새로 고를 때는 대비를 재고 넣는다.** 작은 글자는 4.5:1, 큰 글자·아이콘은 3:1이
+최소다. `muted`를 #8B95A1처럼 흔한 값으로 두면 캡션이 3.3:1이라 밝은 데서 안 읽힌다 —
+지금 값(#6E7269)은 카드 위에서도 4.5:1을 넘긴다.
+
+```kotlin
 // ui/theme/Shape.kt
 val ShaShapes = Shapes(
     small = RoundedCornerShape(4.dp),       // 뱃지, 세트 번호 칩
@@ -138,26 +156,73 @@ object ShaSpacing {
 
 ## 7. 다크모드
 
-`ShaColors`를 다크 변형으로 한 벌 더 만든다 (§1 색상표의 라이트 값 기준, 명도 대비를 더 강하게):
+색 값은 §1에 라이트와 나란히 적어뒀다. 규칙만 다시 적으면:
 
-```
-Canvas #111418 · Surface #1A1E24 · SurfaceRaised #20252C
-Border #2B3138 · BorderStrong #3A414A
-Ink #F2F4F6 · BodyText #B8C0CC · Muted #7B8794
-Primary #5B9DFF · PrimaryWeakBg #16273F · PrimaryWeakFg #8FC0FF
-Success #33D698 · Danger #FF6B70
-```
-
-`isSystemInDarkTheme()` 기준으로 `ShaColors`를 스위칭하고, 화면 코드에서는 색을 직접 쓰지 않고 항상 `ShaColors.xxx`를 통해서만 참조한다 (라이트/다크 하드코딩 금지).
+- `isSystemInDarkTheme()`으로 `ShaColors` 한 벌을 통째로 갈아끼운다
+- **화면 코드에서 `Color(0x...)`를 절대 직접 쓰지 않는다.** 하드코딩한 색만 안 따라 바뀌어서
+  다크에서 흰 카드에 흰 글씨가 난다
+- 라임(`#6FE26C`)은 **양쪽 테마에서 같은 값**이다. 테마 따라 변하는 색은 브랜드색이 아니다
+- `MaterialTheme.colorScheme`도 같이 채운다(`surface`·`background`·`surfaceContainer`까지).
+  안 채우면 아직 안 고친 화면과 기본 다이얼로그·하단탭에 M3 기본 보라 틴트가 깔린다
 
 ## 8. 체크리스트
 
-- [ ] Color.kt / Shape.kt / Spacing.kt / Typography.kt 생성
-- [ ] Pretendard 폰트 연결
-- [ ] Widgets.kt 컴포넌트 9종 작성
-- [ ] TodayDietScreen 적용
-- [ ] TodayWorkoutScreen 적용 (타이머 상태 연동 확인)
+### 작업 단위
+
+- [x] Color.kt / Shape.kt / Spacing.kt / Typography.kt 생성
+- [ ] Pretendard 폰트 연결 (`res/font/`에 파일이 아직 없다. `ShaFontFamily` 한 줄만 바꾸면 된다)
+- [x] 공용 컴포넌트 — `ShaScreen` / `ShaCard` / `StatTile` / `DashedAddButton` / `SubTabBar`
+- [ ] 나머지 컴포넌트 — `SetRow` / `ExerciseCard` / `RestTimerBar` / `WeightTrendCard` /
+      `RecordInputRow` / `CopyableHistoryBlock`
+- [x] TodayDietScreen 적용
+- [ ] TodayWorkoutScreen 적용 (운동 시작·종료 버튼과 휴식 타이머 상태 연동 확인)
 - [ ] BodyRecordScreen 적용 (추이 카드 3개 미만 숨김 처리 확인)
 - [ ] HistoryScreen 적용 — 복사 기능 회귀 테스트 필수
-- [ ] 다크모드 색상 적용 및 확인
-- [ ] ExportScreen은 이번 범위 밖 — 별도 작업으로 진행
+- [x] 다크모드 색상 적용 및 확인
+- [ ] ExportScreen · SettingsScreen은 이번 범위 밖 — 별도 작업으로 진행
+
+### 화면 하나를 고칠 때마다 세어보는 것
+
+**세거나 재서 확인할 수 있는 것만 적는다.** "깔끔한가"는 확인할 수 없고, "테두리 버튼이
+몇 개인가"는 확인할 수 있다. 하나라도 아니오면 안 고쳐진 것이다.
+
+공통
+
+- [ ] `OutlinedButton`이 화면에 하나도 없다
+- [ ] 채운 버튼(`primaryFill`)이 화면에 하나뿐이다
+- [ ] 라임을 **글자 색으로 쓴 곳이 없다** (밝은 테마에서 1.6:1이라 안 보인다)
+- [ ] `HorizontalDivider`가 없다 — 나누는 일은 여백과 카드가 한다
+- [ ] 모든 것이 좌우 같은 선에서 시작한다
+- [ ] 글자 크기가 §1 타이포 표의 단계 안에만 있다
+- [ ] 배경에 보라 틴트가 없다
+- [ ] 숫자가 `Data` 스타일(등폭)이라 세로로 자릿수가 맞는다
+
+오늘 / 식단
+
+- [ ] 오늘 먹은 kcal이 화면에서 제일 큰 글자다
+- [ ] 끼니 칸이 비었을 때 "0kcal"을 안 적는다 (안 먹은 것과 구분이 안 된다)
+
+오늘 / 운동
+
+- [ ] `운동 시작`이 유일한 채운 버튼이다
+- [ ] 운동 중일 때 경과 시간이 화면에서 제일 큰 글자다
+- [ ] 세트의 무게·횟수가 `Data` 스타일이다
+- [ ] 루틴 이름이 한 줄에 들어간다 (안 접힌다)
+
+히스토리
+
+- [ ] 날짜 카드의 kcal·볼륨이 `Data` 스타일이다
+- [ ] 펼친 상세를 **드래그해서 실제로 복사할 수 있다** (`SelectionContainer`)
+- [ ] "복사" 버튼이 기존 로직을 그대로 쓴다 (새로 만들지 않았다)
+
+## 9. 이 문서를 고칠 때
+
+화면을 보고 "뭔가 이상한데"라는 말이 나오면, **그 이상함을 숫자나 규칙으로 바꿔서 여기
+적는다.** 그게 안 되면 아직 무엇이 문제인지 모르는 것이고, 그 상태로 고치면 다음에 또 같은
+말이 나온다.
+
+실제로 만들면서 나온 것들(§3 식단 작업):
+
+- 스탯 타일의 delta가 두 줄이 되면 세 타일의 높이가 어긋난다 → **한 줄로 못 박는다**
+- 3분할 타일에 `209 / 2550 kcal`은 안 들어간다 → 목표치와 단위를 빼고 "2341 남음"만.
+  라벨이 이미 "칼로리"라 단위도 중복이었다
