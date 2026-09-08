@@ -1,0 +1,4 @@
+<resources>
+    <!-- 어두운 테마의 바탕색(`ShaColors.canvas`)과 같은 값. 둘이 어긋나면 앱이 뜨는 순간 색이 튄다. -->
+    <color name="splash_background">#16150F</color>
+</resources>

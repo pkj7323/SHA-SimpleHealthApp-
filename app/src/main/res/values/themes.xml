@@ -1,3 +1,15 @@
 <resources>
-    <style name="Theme.SimpleHealth" parent="android:Theme.Material.Light.NoActionBar" />
+    <!--
+      앱이 뜨는 동안(Compose가 그리기 전) 잠깐 보이는 창의 색.
+
+      Material.Light를 쓰면 어두운 테마인데도 **켤 때마다 흰 화면이 한 번 번쩍인다.**
+      Compose 테마는 DB에서 읽어오므로 그보다 먼저 그려지는 이 창이 앱의 기본값(어둡게)과
+      같아야 한다. 밝게로 바꿔 쓰는 사람에겐 반대로 어두운 순간이 스치지만, 기본값 쪽을
+      맞추는 게 겪는 사람이 적다.
+    -->
+    <style name="Theme.SimpleHealth" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:statusBarColor">@color/splash_background</item>
+        <item name="android:navigationBarColor">@color/splash_background</item>
+    </style>
 </resources>

@@ -323,7 +323,14 @@ fun ShaTextField(
     placeholder: String = "",
     singleLine: Boolean = true,
     minLines: Int = 1,
-    keyboardType: KeyboardType = KeyboardType.Text
+    keyboardType: KeyboardType = KeyboardType.Text,
+    /**
+     * 글자를 받는 칸 자체에 붙는 modifier.
+     *
+     * [modifier]는 라벨까지 감싼 바깥 칸에 붙으므로 **거기에 testTag를 달면 그 노드가
+     * 글자를 못 받는다.** 화면 테스트가 쓰는 태그는 반드시 이쪽으로 준다.
+     */
+    fieldModifier: Modifier = Modifier
 ) {
     val colors = ShaTheme.colors
     Column(modifier) {
@@ -343,7 +350,7 @@ fun ShaTextField(
             textStyle = ShaTheme.type.body.copy(color = colors.ink),
             cursorBrush = SolidColor(colors.primary),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-            modifier = Modifier
+            modifier = fieldModifier
                 .fillMaxWidth()
                 .background(colors.surface, RoundedCornerShape(12.dp))
                 .padding(horizontal = 14.dp, vertical = 14.dp),

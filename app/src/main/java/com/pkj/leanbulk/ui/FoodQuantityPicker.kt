@@ -3,6 +3,10 @@ package com.pkj.leanbulk.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -131,7 +135,14 @@ fun FoodQuantityPickerDialog(
         return
     }
 
-    ShaDialog(title = "음식 추가", onDismiss = onDismiss, dismissText = "닫기") {
+    ShaDialog(
+        title = "음식 추가",
+        onDismiss = onDismiss,
+        dismissText = "닫기",
+        // 목록 위에 떠 있으면 음식 한 줄처럼 보인다. 늘 손 닿는 아래에 둔다(종목 추가 창과 같다).
+        confirmText = "직접 등록",
+        onConfirm = { showDirectRegister = true }
+    ) {
                 SubTabBar(
                     tabs = FoodPickerTab.entries.map { it.label },
                     selected = tab.ordinal,
@@ -192,41 +203,43 @@ private fun SearchFoodTab(
             )
         }
     }
-    // "일반 검색"과 "AI 검색" 중 고른다. AI 검색은 아직 백엔드가 없어 안내만 뜬다(§9.5).
-    var aiSearch by remember { mutableStateOf(false) }
+    val colors = ShaTheme.colors
+    val type = ShaTheme.type
 
-    Column(Modifier.padding(top = 8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            FilterChip(selected = !aiSearch, onClick = { aiSearch = false }, label = { Text("일반 검색") })
-            FilterChip(
-                selected = aiSearch,
-                onClick = { aiSearch = true },
-                label = { Text("AI 검색") },
-                modifier = Modifier.testTag("food_ai_search_toggle")
+    Column {
+        // 검색칸과 "선택"을 한 줄에 둔다. 예전엔 검색 방식 칩·분류 칩·선택 삭제 칩이
+        // 각자 한 줄씩 차지해서, 음식이 한 개도 보이기 전에 다섯 줄을 지나야 했다.
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(ShaSpacing.md),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            ShaTextField(
+                label = "",
+                value = query,
+                onValueChange = { query = it },
+                placeholder = "음식 검색",
+                modifier = Modifier.weight(1f),
+                fieldModifier = Modifier.testTag("food_search_query")
             )
-        }
-
-        if (aiSearch) {
             Text(
-                "AI 검색은 준비 중입니다.",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 16.dp).testTag("food_ai_search_placeholder")
+                text = if (selecting) "취소" else "선택",
+                style = type.bodyStrong,
+                color = if (selecting) colors.danger else colors.primary,
+                modifier = Modifier
+                    .clickable {
+                        selecting = !selecting
+                        if (!selecting) picked.clear()
+                    }
+                    .padding(horizontal = ShaSpacing.sm, vertical = 14.dp)
+                    .testTag("food_select_mode")
             )
-            return@Column
         }
-
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            label = { Text("음식 검색") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("food_search_query")
-        )
 
         val categories = remember(foods) { foods.map { it.category }.distinct().sorted() }
         LazyRow(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.fillMaxWidth().padding(vertical = ShaSpacing.md),
+            horizontalArrangement = Arrangement.spacedBy(ShaSpacing.sm)
         ) {
             item {
                 FilterChip(selected = category == null, onClick = { category = null }, label = { Text("전체") })
@@ -240,47 +253,54 @@ private fun SearchFoodTab(
             }
         }
 
-        Row(
-            Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FilterChip(
-                selected = selecting,
-                onClick = {
-                    selecting = !selecting
-                    if (!selecting) picked.clear()
-                },
-                label = { Text(if (selecting) "선택 취소" else "선택 삭제") },
-                modifier = Modifier.testTag("food_select_mode")
+        if (selecting && picked.isNotEmpty()) {
+            Text(
+                "${picked.size}개 지우기",
+                style = type.bodyStrong,
+                color = colors.danger,
+                modifier = Modifier
+                    .clickable { confirmDelete = true }
+                    .padding(vertical = ShaSpacing.md)
+                    .testTag("food_delete_selected")
             )
-            if (selecting && picked.isNotEmpty()) {
-                TextButton(
-                    onClick = { confirmDelete = true },
-                    modifier = Modifier.testTag("food_delete_selected")
-                ) { Text("${picked.size}개 지우기") }
-            }
         }
 
         val filtered = foods.filter {
             (category == null || it.category == category) && it.name.contains(query, ignoreCase = true)
         }
 
-        LazyColumn(Modifier.heightIn(max = 240.dp)) {
-            // 검색 결과 맨 위에 고정 — 찾는 음식이 카탈로그에 없을 때 바로 등록하러 간다(§9.6).
-            if (!selecting) item {
-                Row(
-                    Modifier.fillMaxWidth().testTag("food_direct_register"),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(onClick = onDirectRegister, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Filled.Add, contentDescription = null)
-                        Text("직접 등록", modifier = Modifier.padding(start = 4.dp))
+        // 숫자 칸이 무슨 값인지 한 번만 적는다. 줄마다 "kcal"을 붙이면 자릿수가 어긋난다.
+        if (filtered.isNotEmpty()) {
+            Row(Modifier.fillMaxWidth().padding(bottom = ShaSpacing.xs)) {
+                Box(Modifier.weight(1f))
+                Text(
+                    "kcal",
+                    style = type.caption,
+                    color = colors.muted,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.width(KCAL_COLUMN_WIDTH).padding(end = ShaSpacing.md)
+                )
+                Box(Modifier.width(ICON_COLUMN_WIDTH))
+            }
+        }
+
+        LazyColumn(Modifier.heightIn(max = 320.dp)) {
+            if (filtered.isEmpty()) {
+                item {
+                    Column(Modifier.padding(vertical = ShaSpacing.lg)) {
+                        Text("찾는 음식이 없습니다.", style = type.body, color = colors.bodyText)
+                        // AI 검색은 아직 백엔드가 없다(§9.5). 못 찾았을 때만 언급한다 —
+                        // 늘 띄워두면 되지도 않는 기능이 화면 위쪽을 계속 차지한다.
+                        Text(
+                            "아래 \"직접 등록\"으로 만들 수 있습니다. AI 검색은 준비 중입니다.",
+                            style = type.caption,
+                            color = colors.muted,
+                            modifier = Modifier
+                                .padding(top = ShaSpacing.xs)
+                                .testTag("food_ai_search_placeholder")
+                        )
                     }
                 }
-            }
-            if (filtered.isEmpty()) {
-                item { Text("찾는 음식이 없습니다.", style = MaterialTheme.typography.bodySmall) }
             }
             items(filtered, key = { it.id }) { food ->
                 FoodRow(
@@ -313,7 +333,7 @@ private fun FavoriteFoodTab(
                 style = MaterialTheme.typography.bodySmall
             )
         }
-        LazyColumn(Modifier.heightIn(max = 360.dp)) {
+        LazyColumn(Modifier.heightIn(max = 400.dp)) {
             items(foods, key = { it.id }) { food ->
                 FoodRow(
                     food = food,
@@ -342,6 +362,9 @@ private fun FoodRow(
     checked: Boolean = false,
     onCheckedChange: () -> Unit = {}
 ) {
+    val colors = ShaTheme.colors
+    val type = ShaTheme.type
+
     Row(
         Modifier.fillMaxWidth().testTag("food_row_${food.id}"),
         verticalAlignment = Alignment.CenterVertically
@@ -352,33 +375,83 @@ private fun FoodRow(
                 onCheckedChange = { onCheckedChange() },
                 modifier = Modifier.testTag("food_check_${food.id}")
             )
-        } else {
-            IconButton(onClick = onToggleFavorite, modifier = Modifier.testTag("food_favorite_${food.id}")) {
-                if (food.favorite) {
-                    Icon(Icons.Filled.Star, contentDescription = "즐겨찾기 해제")
-                } else {
-                    Icon(Icons.Outlined.StarBorder, contentDescription = "즐겨찾기 추가")
-                }
-            }
         }
         Column(
-            Modifier.weight(1f).clickable(onClick = onPick).padding(vertical = 10.dp, horizontal = 4.dp)
+            Modifier.weight(1f).clickable(onClick = onPick).padding(vertical = ShaSpacing.md)
         ) {
-            Text(food.name, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
-                formatMacroSummary(food.macros),
-                style = MaterialTheme.typography.bodySmall,
+                food.name,
+                style = type.bodyStrong,
+                color = colors.ink,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
+            // 칼로리는 오른쪽으로 뺐으므로 여기서는 뺀다. 한 줄로 묶어 두 줄로 안 접히게 한다.
+            Text(
+                sideSummary(food),
+                style = type.caption,
+                color = colors.muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
+        // 이 목록에서 눈으로 고르는 기준은 칼로리다. **폭을 고정하고 오른쪽에 맞춘다** —
+        // 안 그러면 17과 132의 오른쪽 끝이 어긋나서 세로로 훑을 때 비교가 안 된다.
+        Text(
+            food.macros.kcal?.roundToInt()?.toString() ?: "?",
+            style = type.dataSmall,
+            color = colors.bodyText,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(KCAL_COLUMN_WIDTH).padding(end = ShaSpacing.md)
+        )
         if (!selecting) {
-            IconButton(onClick = onEdit, modifier = Modifier.testTag("food_edit_${food.id}")) {
-                Icon(Icons.Filled.Edit, contentDescription = "음식 수정")
+            IconButton(
+                onClick = onToggleFavorite,
+                modifier = Modifier.size(36.dp).testTag("food_favorite_${food.id}")
+            ) {
+                if (food.favorite) {
+                    Icon(
+                        Icons.Filled.Star,
+                        contentDescription = "즐겨찾기 해제",
+                        tint = colors.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                } else {
+                    Icon(
+                        Icons.Outlined.StarBorder,
+                        contentDescription = "즐겨찾기 추가",
+                        tint = colors.muted,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            IconButton(
+                onClick = onEdit,
+                modifier = Modifier.size(36.dp).testTag("food_edit_${food.id}")
+            ) {
+                Icon(
+                    Icons.Filled.Edit,
+                    contentDescription = "음식 수정",
+                    tint = colors.muted,
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
     }
 }
+
+/** 이름 아래 한 줄. 기준량을 아는 음식은 그걸 앞에 세운다 — 100g인지 1개인지가 먼저 궁금하다. */
+private fun sideSummary(food: FoodItem): String {
+    val amount = food.baseAmount?.let { "${it.roundToInt()}${food.baseAmountUnit.label}" }
+    val macros = "단백질 ${num(food.macros.protein)} · 탄수 ${num(food.macros.carbs)} · 지방 ${num(food.macros.fat)}"
+    return listOfNotNull(amount, macros).joinToString(" · ")
+}
+
+private fun num(value: Double?): String = value?.roundToInt()?.let { "${it}g" } ?: "?"
+
+/** 칼로리 칸과 오른쪽 아이콘 두 개의 폭. 머리글과 줄이 같은 값을 써야 세로로 맞는다. */
+private val KCAL_COLUMN_WIDTH = 60.dp
+private val ICON_COLUMN_WIDTH = 72.dp
 
 private fun togglePick(picked: MutableList<Long>, id: Long) {
     if (!picked.remove(id)) picked.add(id)
@@ -478,7 +551,7 @@ private fun FoodFormDialog(
                     label = "음식 이름",
                     value = name,
                     onValueChange = { name = it },
-                    modifier = Modifier.testTag("direct_register_name")
+                    fieldModifier = Modifier.testTag("direct_register_name")
                 )
                 ShaTextField(
                     label = "분류",

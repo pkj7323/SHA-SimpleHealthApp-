@@ -206,7 +206,7 @@ fun MemoDialog(
             placeholder = "예: 밖에서 사 먹음",
             singleLine = false,
             minLines = 3,
-            modifier = Modifier.testTag("memo_field")
+            fieldModifier = Modifier.testTag("memo_field")
         )
     }
 }
