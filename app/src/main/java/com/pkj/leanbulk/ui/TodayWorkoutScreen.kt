@@ -1,13 +1,19 @@
 package com.pkj.leanbulk.ui
 
 import android.app.DatePickerDialog
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,6 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EditNote
@@ -31,7 +38,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -52,7 +58,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -486,8 +496,8 @@ private fun CardAction(text: String, onClick: () -> Unit, modifier: Modifier = M
 /** 세트 번호 칸 폭. 머리글과 세트 줄이 같은 값을 써야 칸이 세로로 맞는다. */
 private val SET_NUMBER_WIDTH = 24.dp
 
-/** 완료 체크 칸 폭. 위와 같은 이유. */
-private val DONE_WIDTH = 32.dp
+/** 완료 표시 칸 폭. 위와 같은 이유. 누르는 자리라 너무 작으면 안 된다. */
+private val DONE_WIDTH = 34.dp
 
 /**
  * 어떤 칸이 있는지 종목 카드에 **한 번만** 적는다.
@@ -577,11 +587,59 @@ private fun SetRow(
             }
         }
 
-        Checkbox(
-            checked = set.done,
-            onCheckedChange = { checked -> onChange { it.copy(done = checked) } },
-            modifier = Modifier.size(DONE_WIDTH)
+        SetDoneToggle(
+            done = set.done,
+            onToggle = { onChange { it.copy(done = !it.done) } }
         )
+    }
+}
+
+/**
+ * 세트 완료 표시.
+ *
+ * 네모 체크박스 대신 **동그란 채움**을 쓴다. 이 앱에서 채워진 것은 브랜드색이라는 규칙이
+ * 있고([ShaColors]), 세트를 끝내는 건 화면에서 가장 자주 하는 "해냈다"이므로 그 규칙이
+ * 가장 잘 어울리는 자리다.
+ *
+ * 색은 [animateColorAsState]로 넘어간다. 딸깍 바뀌면 눌렀는지 애매한데, 0.15초만 흘러도
+ * "방금 내가 눌렀다"가 분명해진다.
+ */
+@Composable
+private fun SetDoneToggle(done: Boolean, onToggle: () -> Unit) {
+    val colors = ShaTheme.colors
+    val fill by animateColorAsState(
+        targetValue = if (done) colors.primaryFill else Color.Transparent,
+        animationSpec = tween(150),
+        label = "setDoneFill"
+    )
+    val ring by animateColorAsState(
+        targetValue = if (done) colors.primaryFill else colors.borderStrong,
+        animationSpec = tween(150),
+        label = "setDoneRing"
+    )
+
+    Box(
+        Modifier
+            .width(DONE_WIDTH)
+            .height(DONE_WIDTH)
+            .clip(CircleShape)
+            .background(fill)
+            .border(2.dp, ring, CircleShape)
+            .clickable(onClick = onToggle)
+            .semantics {
+                contentDescription = if (done) "세트 완료 해제" else "세트 완료"
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        // 안 한 세트에는 빈 동그라미만 남긴다. 흐린 체크를 그려두면 이미 한 것처럼 보인다.
+        if (done) {
+            Icon(
+                Icons.Filled.Check,
+                contentDescription = null,
+                tint = colors.onPrimaryFill,
+                modifier = Modifier.size(18.dp)
+            )
+        }
     }
 }
 

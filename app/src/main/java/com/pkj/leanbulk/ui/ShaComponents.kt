@@ -301,7 +301,13 @@ fun ShaPrimaryButton(
     }
 }
 
-/** 취소·닫기처럼 "안 하는" 쪽. 테두리 대신 옅은 바탕으로 무게를 낮춘다. */
+/**
+ * 취소·닫기처럼 "안 하는" 쪽. 테두리 대신 옅은 바탕으로 무게를 낮춘다.
+ *
+ * 바탕에 `surface`를 쓰면 **어두운 테마에서 화면 배경과 같은 색이라 버튼이 사라진다.**
+ * `border`는 화면 바탕(`surface`) 위에서도, 다이얼로그 바탕(`surfaceRaised`) 위에서도
+ * 한 단계 구분되는 유일한 값이라 양쪽에서 다 보인다.
+ */
 @Composable
 fun ShaSecondaryButton(
     text: String,
@@ -312,7 +318,7 @@ fun ShaSecondaryButton(
     Box(
         modifier
             .height(48.dp)
-            .background(colors.surface, RoundedCornerShape(14.dp))
+            .background(colors.border, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
