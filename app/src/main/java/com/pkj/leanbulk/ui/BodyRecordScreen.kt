@@ -24,6 +24,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +50,8 @@ fun BodyRecordScreen(vm: MainViewModel) {
     val records by vm.bodyRecords.collectAsState()
 
     var editing by remember { mutableStateOf<BodyRecord?>(null) }
+    // 탭을 옮겼다 와도 보던 방식이 유지되게 rememberSaveable로 둔다.
+    var asChart by rememberSaveable { mutableStateOf(false) }
     val colors = ShaTheme.colors
     val type = ShaTheme.type
 
@@ -71,8 +74,6 @@ fun BodyRecordScreen(vm: MainViewModel) {
                 item { LatestStats(records) }
             }
 
-            item { WeightTrendCard(records) }
-
             item {
                 BodyRecordForm(
                     initial = editing,
@@ -83,12 +84,19 @@ fun BodyRecordScreen(vm: MainViewModel) {
             }
 
             item {
-                Text(
-                    "기록",
-                    style = type.h2,
-                    color = colors.ink,
-                    modifier = Modifier.padding(top = ShaSpacing.lg, bottom = ShaSpacing.xs)
-                )
+                Row(
+                    Modifier.fillMaxWidth().padding(top = ShaSpacing.lg, bottom = ShaSpacing.xs),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("기록", style = type.h2, color = colors.ink, modifier = Modifier.weight(1f))
+                    if (records.isNotEmpty()) {
+                        SubTabBar(
+                            tabs = listOf("목록", "그래프"),
+                            selected = if (asChart) 1 else 0,
+                            onSelect = { asChart = it == 1 }
+                        )
+                    }
+                }
             }
 
             if (records.isEmpty()) {
@@ -99,6 +107,20 @@ fun BodyRecordScreen(vm: MainViewModel) {
                         color = colors.muted,
                         modifier = Modifier.padding(vertical = ShaSpacing.md)
                     )
+                }
+            } else if (asChart) {
+                val series = metricSeries(records)
+                if (series.isEmpty()) {
+                    item {
+                        Text(
+                            "그래프를 그리려면 같은 항목을 세 번 이상 기록해야 합니다.",
+                            style = type.body,
+                            color = colors.muted,
+                            modifier = Modifier.padding(vertical = ShaSpacing.md)
+                        )
+                    }
+                } else {
+                    items(series, key = { it.label }) { MetricChartCard(it) }
                 }
             } else {
                 items(records, key = { it.id }) { record ->
@@ -169,71 +191,123 @@ private fun toneForGain(now: Double?, before: Double?, good: Color): Color? =
     if (now != null && before != null && now > before) good else null
 
 /**
- * 체중 추이 스파크라인.
+ * 한 항목의 시간 흐름. [points]는 오래된 것이 앞이다.
  *
- * **점이 셋 미만이면 카드를 아예 안 그린다.** 두 점을 이은 직선은 추세가 아니라 그냥 선이고,
- * 그걸 그래프로 보여주면 없는 경향을 읽게 만든다.
+ * 항목마다 카드를 따로 그린다. 체중과 체지방률을 한 그림에 겹치면 축이 달라서
+ * (kg vs %) 어느 쪽 기울기도 사실이 아니게 된다.
  */
-@Composable
-private fun WeightTrendCard(records: List<BodyRecord>) {
-    val points = remember(records) { records.take(12).reversed().map { it.weightKg } }
-    if (points.size < 3) return
+private data class MetricSeries(
+    val label: String,
+    val unit: String,
+    val points: List<Pair<String, Double>>
+)
 
+/**
+ * 그래프로 그릴 만한 항목만 골라낸다.
+ *
+ * **점이 셋 미만인 항목은 아예 뺀다.** 두 점을 이은 직선은 추세가 아니라 그냥 선이고,
+ * 그걸 그래프로 보여주면 없는 경향을 읽게 만든다. 항목마다 따로 세는 이유는 체중만
+ * 열 번 적고 허리는 한 번 잰 경우가 흔하기 때문이다.
+ */
+private fun metricSeries(records: List<BodyRecord>): List<MetricSeries> {
+    val old = records.reversed() // 화면에 온 목록은 최신이 앞이다.
+    fun series(label: String, unit: String, pick: (BodyRecord) -> Double?) = MetricSeries(
+        label = label,
+        unit = unit,
+        points = old.mapNotNull { r -> pick(r)?.let { r.date to it } }
+    )
+    return listOf(
+        series("체중", "kg") { it.weightKg },
+        series("골격근량", "kg") { it.muscleMassKg },
+        series("체지방량", "kg") { it.fatMassKg },
+        series("체지방률", "%") { it.fatPercent },
+        series("허리둘레", "cm") { it.waistCm }
+    ).filter { it.points.size >= 3 }
+}
+
+@Composable
+private fun MetricChartCard(series: MetricSeries) {
     val colors = ShaTheme.colors
     val type = ShaTheme.type
-    val min = points.min()
-    val max = points.max()
+    val values = series.points.map { it.second }
+    val min = values.min()
+    val max = values.max()
     // 값이 다 같으면 나눗셈이 0으로 간다. 그때는 가운데 수평선으로 그린다.
     val span = (max - min).takeIf { it > 0.0001 }
+    val first = values.first()
+    val last = values.last()
 
     ShaCard {
         Column {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("체중 추이", style = type.h2, color = colors.ink, modifier = Modifier.weight(1f))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                Text(series.label, style = type.h2, color = colors.ink, modifier = Modifier.weight(1f))
+                Text(fmt(last), style = type.data, color = colors.ink)
                 Text(
-                    "최근 " + points.size + "회",
+                    series.unit,
                     style = type.caption,
-                    color = colors.muted
+                    color = colors.muted,
+                    modifier = Modifier.padding(start = 2.dp, bottom = 2.dp)
                 )
             }
+            Text(
+                // 첫 기록 대비 얼마나 움직였는지. 그래프의 기울기를 숫자로 한 번 더 말해준다.
+                deltaText(last, first, series.unit)?.let { it + " (처음 대비)" } ?: "변화 없음",
+                style = type.caption,
+                color = colors.muted
+            )
 
             Canvas(
                 Modifier
                     .fillMaxWidth()
-                    .height(72.dp)
+                    .height(96.dp)
                     .padding(top = ShaSpacing.md)
-                    .testTag("weight_trend_canvas")
+                    .testTag("metric_chart_" + series.label)
             ) {
-                val stepX = if (points.size > 1) size.width / (points.size - 1) else 0f
+                val stepX = if (values.size > 1) size.width / (values.size - 1) else 0f
                 fun yOf(value: Double): Float {
                     val ratio = span?.let { (value - min) / it } ?: 0.5
                     // 위아래로 살짝 여백을 둔다. 최고·최저점이 선 굵기만큼 잘려 보이지 않게.
-                    return (size.height - 6f) - (ratio.toFloat() * (size.height - 12f))
+                    return (size.height - 8f) - (ratio.toFloat() * (size.height - 16f))
                 }
 
                 val path = Path()
-                points.forEachIndexed { i, v ->
+                values.forEachIndexed { i, v ->
                     val x = i * stepX
                     val y = yOf(v)
                     if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
                 }
                 drawPath(path, color = colors.primaryFill, style = Stroke(width = 5f))
 
-                // 마지막 점만 강조한다. 전부 찍으면 선보다 점이 눈에 먼저 들어온다.
-                drawCircle(
-                    color = colors.primaryFill,
-                    radius = 8f,
-                    center = Offset((points.size - 1) * stepX, yOf(points.last()))
-                )
+                // 점을 다 찍되 마지막만 크게. 잰 횟수가 몇 번인지 보이면서도 지금 값이 도드라진다.
+                values.forEachIndexed { i, v ->
+                    drawCircle(
+                        color = colors.primaryFill,
+                        radius = if (i == values.lastIndex) 9f else 4f,
+                        center = Offset(i * stepX, yOf(v))
+                    )
+                }
             }
 
             Row(Modifier.fillMaxWidth().padding(top = ShaSpacing.sm)) {
-                Text(fmt(points.first()) + "kg", style = type.caption, color = colors.muted)
+                Text(shortDate(series.points.first().first), style = type.caption, color = colors.muted)
                 Box(Modifier.weight(1f))
-                Text(fmt(points.last()) + "kg", style = type.caption, color = colors.ink)
+                Text(
+                    fmt(min) + " ~ " + fmt(max) + series.unit,
+                    style = type.caption,
+                    color = colors.muted
+                )
+                Box(Modifier.weight(1f))
+                Text(shortDate(series.points.last().first), style = type.caption, color = colors.muted)
             }
         }
     }
+}
+
+/** "2026-09-08" → "9.8". 그래프 양 끝 라벨은 좁아서 연도까지 넣으면 서로 붙는다. */
+private fun shortDate(iso: String): String {
+    val parts = iso.split("-")
+    if (parts.size != 3) return iso
+    return parts[1].trimStart('0') + "." + parts[2].trimStart('0')
 }
 
 @Composable
