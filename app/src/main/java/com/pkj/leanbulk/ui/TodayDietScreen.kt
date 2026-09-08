@@ -1,6 +1,14 @@
 package com.pkj.leanbulk.ui
 
 import android.app.DatePickerDialog
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.ui.graphics.Color
+import com.pkj.leanbulk.ui.theme.ShaSpacing
+import com.pkj.leanbulk.ui.theme.ShaTheme
+import java.time.format.TextStyle as JavaTextStyle
+import java.util.Locale
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -74,40 +82,32 @@ fun TodayDietScreen(vm: MainViewModel) {
     val mealPresets by vm.mealPresets.collectAsState()
 
     val totals = remember(draft) { draft.totals() }
+    val colors = ShaTheme.colors
+    val type = ShaTheme.type
 
-    Box(Modifier.fillMaxSize()) {
-        // 헤더/합계까지 전부 한 LazyColumn 안에 넣어야 위로 같이 스크롤된다.
+    ShaScreen {
         LazyColumn(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = ShaSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(ShaSpacing.md)
         ) {
             item {
-                Column {
-                    // 날짜 + 기록 (운동과 별도로 저장된다)
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        val context = LocalContext.current
-                        OutlinedButton(onClick = {
-                            val current = LocalDate.parse(date)
-                            DatePickerDialog(
-                                context,
-                                { _, y, m, d -> vm.setDietDate(LocalDate.of(y, m + 1, d).toString()) },
-                                current.year, current.monthValue - 1, current.dayOfMonth
-                            ).show()
-                        }) { Text(date) }
-                        Box(Modifier.weight(1f))
-                        // 첫 편집 전에도 자동 저장이 켜져 있다는 걸 알 수 있게 항상 표시한다.
-                        Text(
-                            text = savedAt?.let { "저장됨 $it" } ?: "자동 저장",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Box(Modifier.padding(horizontal = 4.dp))
-                        OutlinedButton(onClick = { showTargetDialog = true }) { Text("목표") }
-                    }
+                DateHeader(
+                    date = date,
+                    savedAt = savedAt,
+                    onDateChange = vm::setDietDate,
+                    onOpenTarget = { showTargetDialog = true }
+                )
+            }
 
-                    HorizontalDivider(Modifier.padding(vertical = 12.dp))
+            item { TotalsRow(totals, target) }
 
-                    TotalsSection(totals, target)
-                }
+            item {
+                Text(
+                    "끼니",
+                    style = type.h2,
+                    color = colors.ink,
+                    modifier = Modifier.padding(top = ShaSpacing.md, bottom = ShaSpacing.xs)
+                )
             }
 
             itemsIndexed(draft) { index, meal ->
@@ -123,15 +123,15 @@ fun TodayDietScreen(vm: MainViewModel) {
                 )
             }
 
-            // 마지막 카드가 + 버튼에 가리지 않도록 아래를 비워둔다.
-            item { Box(Modifier.padding(bottom = 72.dp)) }
-        }
+            item {
+                DashedAddButton(
+                    text = "끼니 추가",
+                    onClick = { showAddMeal = true },
+                    modifier = Modifier.padding(top = ShaSpacing.xs)
+                )
+            }
 
-        SmallFloatingActionButton(
-            onClick = { showAddMeal = true },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
-        ) {
-            Icon(Icons.Filled.Add, contentDescription = "끼니 추가")
+            item { Box(Modifier.padding(bottom = ShaSpacing.xl)) }
         }
     }
 
@@ -206,42 +206,130 @@ fun TodayDietScreen(vm: MainViewModel) {
     }
 }
 
+/**
+ * 날짜 줄. 달력을 열지 않고도 어제·내일로 갈 수 있게 화살표를 둔다 —
+ * 실제로 옮기는 날짜는 대부분 하루 차이라 매번 달력을 띄우는 건 과하다.
+ */
 @Composable
-private fun TotalsSection(totals: DietTotals, target: DietTarget?) {
-    Text("오늘 섭취", style = MaterialTheme.typography.titleMedium)
+private fun DateHeader(
+    date: String,
+    savedAt: String?,
+    onDateChange: (String) -> Unit,
+    onOpenTarget: () -> Unit
+) {
+    val colors = ShaTheme.colors
+    val type = ShaTheme.type
+    val context = LocalContext.current
+    val parsed = LocalDate.parse(date)
 
-    MacroBar("칼로리", totals.entered.kcal, target?.kcal, "kcal")
-    MacroBar("단백질", totals.entered.protein, target?.protein, "g")
-    MacroBar("탄수화물", totals.entered.carbs, target?.carbs, "g")
-    MacroBar("지방", totals.entered.fat, target?.fat, "g")
-    MacroBar("당", totals.entered.sugar, target?.sugar, "g")
-
-    if (totals.unknownCount > 0) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = ShaSpacing.lg, bottom = ShaSpacing.md),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = { onDateChange(parsed.minusDays(1).toString()) }) {
+            Icon(Icons.Filled.ChevronLeft, contentDescription = "하루 전", tint = colors.muted)
+        }
+        Column(
+            Modifier
+                .weight(1f)
+                .clickable {
+                    DatePickerDialog(
+                        context,
+                        { _, y, m, d -> onDateChange(LocalDate.of(y, m + 1, d).toString()) },
+                        parsed.year, parsed.monthValue - 1, parsed.dayOfMonth
+                    ).show()
+                }
+        ) {
+            Text(dateLabel(parsed), style = type.h1, color = colors.ink)
+            Text(
+                text = savedAt?.let { "저장됨 " + it } ?: "자동 저장",
+                style = type.caption,
+                color = colors.muted
+            )
+        }
+        IconButton(onClick = { onDateChange(parsed.plusDays(1).toString()) }) {
+            Icon(Icons.Filled.ChevronRight, contentDescription = "하루 뒤", tint = colors.muted)
+        }
         Text(
-            "· 영양정보를 모르는 끼니 ${totals.unknownCount}개는 합계에 안 들어갔습니다",
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(top = 4.dp)
+            "목표",
+            style = type.bodyStrong,
+            color = colors.primary,
+            modifier = Modifier
+                .clickable(onClick = onOpenTarget)
+                .padding(horizontal = ShaSpacing.md, vertical = ShaSpacing.md)
         )
     }
 }
 
+/** "9월 8일 (화)". 연도는 웬만하면 올해라 빼고, 요일은 기록을 되짚을 때 실제로 쓰인다. */
+private fun dateLabel(date: LocalDate): String {
+    val today = LocalDate.now()
+    val weekday = date.dayOfWeek.getDisplayName(JavaTextStyle.SHORT, Locale.KOREAN)
+    val head = when (date) {
+        today -> "오늘"
+        today.minusDays(1) -> "어제"
+        else -> "" + date.monthValue + "월 " + date.dayOfMonth + "일"
+    }
+    return head + " (" + weekday + ")"
+}
+
+/**
+ * 화면 맨 위 숫자 세 칸.
+ *
+ * 다섯 개(칼로리·단백질·탄수·지방·당)를 다 큰 숫자로 올리면 무엇도 눈에 안 들어온다.
+ * **매일 보는 셋만** 타일로 올리고 나머지는 끼니 카드 안에서 읽는다.
+ */
 @Composable
-private fun MacroBar(label: String, value: Double?, target: Double?, unit: String) {
-    val actual = value ?: 0.0
-    Column(Modifier.padding(vertical = 4.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label)
-            val targetText = target?.let { " / ${it.roundToInt()}" } ?: ""
-            Text("${actual.roundToInt()}$targetText $unit")
-        }
-        if (target != null && target > 0) {
-            LinearProgressIndicator(
-                progress = { (actual / target).toFloat().coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
+private fun TotalsRow(totals: DietTotals, target: DietTarget?) {
+    val colors = ShaTheme.colors
+    Row(horizontalArrangement = Arrangement.spacedBy(ShaSpacing.md)) {
+        StatTile(
+            label = "칼로리",
+            value = (totals.entered.kcal ?: 0.0).roundToInt().toString(),
+            // 단위도 목표치도 안 붙인다. 칸이 좁아 "kcal"이 잘리고, 라벨이 이미 "칼로리"다.
+            unit = "",
+            delta = remainingText(totals.entered.kcal, target?.kcal),
+            deltaTone = toneFor(totals.entered.kcal, target?.kcal, colors.success, colors.muted),
+            modifier = Modifier.weight(1f)
+        )
+        StatTile(
+            label = "단백질",
+            value = (totals.entered.protein ?: 0.0).roundToInt().toString(),
+            unit = "g",
+            delta = remainingText(totals.entered.protein, target?.protein),
+            deltaTone = toneFor(totals.entered.protein, target?.protein, colors.success, colors.muted),
+            modifier = Modifier.weight(1f)
+        )
+        StatTile(
+            label = "탄수",
+            value = (totals.entered.carbs ?: 0.0).roundToInt().toString(),
+            unit = "g",
+            delta = remainingText(totals.entered.carbs, target?.carbs),
+            deltaTone = toneFor(totals.entered.carbs, target?.carbs, colors.success, colors.muted),
+            modifier = Modifier.weight(1f)
+        )
+    }
+
+    if (totals.unknownCount > 0) {
+        Text(
+            "영양정보를 모르는 끼니 " + totals.unknownCount + "개는 합계에 안 들어갔습니다",
+            style = ShaTheme.type.caption,
+            color = colors.muted,
+            modifier = Modifier.padding(top = ShaSpacing.md)
+        )
     }
 }
+
+/** 목표가 없으면 남은 양을 말할 수 없다. 지어내지 않고 빈 자리로 둔다. */
+private fun remainingText(value: Double?, target: Double?): String? {
+    if (target == null || target <= 0) return null
+    val left = target - (value ?: 0.0)
+    // 단위는 안 붙인다. 바로 위 숫자 옆에 이미 붙어 있어서 두 번 읽힌다.
+    return if (left <= 0) "목표 도달" else "" + left.roundToInt() + " 남음"
+}
+
+private fun toneFor(value: Double?, target: Double?, reached: Color, normal: Color): Color =
+    if (target != null && target > 0 && (value ?: 0.0) >= target) reached else normal
 
 /**
  * 끼니 한 칸. 이름(아침·점심·저녁·간식)은 고정이라 고치지 못하고, 담긴 음식 줄의 합이 곧 이 끼니다.
@@ -258,43 +346,80 @@ private fun MealCard(
     onMoveFood: (Int, Int) -> Unit,
     onEditMemo: () -> Unit
 ) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
+    val colors = ShaTheme.colors
+    val type = ShaTheme.type
+    val filled = meal.foods.isNotEmpty() || !meal.macros.isEmpty
 
+    ShaCard {
+        Column {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(meal.slotName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                IconButton(onClick = onEditMemo, modifier = Modifier.testTag("meal_memo_${meal.slotName}")) {
-                    Icon(Icons.Filled.EditNote, contentDescription = "메모")
+                Text(meal.slotName, style = type.h2, color = colors.ink, modifier = Modifier.weight(1f))
+                // 담은 게 있을 때만 합계를 적는다. 빈 칸에 "0kcal"은 안 먹었다는 뜻이 아니라 잡음이다.
+                if (filled) {
+                    Text(
+                        text = meal.macros.kcal?.roundToInt()?.toString() ?: "?",
+                        style = type.data,
+                        color = colors.ink
+                    )
+                    Text(
+                        "kcal",
+                        style = type.caption,
+                        color = colors.muted,
+                        modifier = Modifier.padding(start = 2.dp)
+                    )
+                }
+                IconButton(onClick = onEditMemo, modifier = Modifier.testTag("meal_memo_" + meal.slotName)) {
+                    Icon(Icons.Filled.EditNote, contentDescription = "메모", tint = colors.muted)
                 }
                 onRemove?.let {
                     IconButton(onClick = it) {
-                        Icon(Icons.Filled.Delete, contentDescription = "끼니 삭제")
+                        Icon(Icons.Filled.Delete, contentDescription = "끼니 삭제", tint = colors.muted)
                     }
                 }
             }
 
+            if (filled) {
+                Text(
+                    macroLine(meal.macros),
+                    style = type.caption,
+                    color = colors.muted,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+
             meal.foods.forEachIndexed { index, food ->
                 Row(
-                    Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    Modifier.fillMaxWidth().padding(top = ShaSpacing.md),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text(food.name, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(formatFoodQuantity(food), style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            food.name,
+                            style = type.bodyStrong,
+                            color = colors.ink,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(quantityLine(food), style = type.caption, color = colors.muted)
                     }
+                    Text(
+                        food.macros.kcal?.roundToInt()?.toString() ?: "?",
+                        style = type.dataSmall,
+                        color = colors.bodyText
+                    )
                     // 종목 순서 조정과 같은 이유 — 담는 순서가 늘 마지막이라 끌어올릴 수단이 필요하다.
                     IconButton(
                         onClick = { onMoveFood(index, index - 1) },
                         enabled = index > 0,
-                        modifier = Modifier.size(36.dp)
-                    ) { Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "위로") }
+                        modifier = Modifier.size(32.dp)
+                    ) { Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "위로", tint = colors.muted) }
                     IconButton(
                         onClick = { onMoveFood(index, index + 1) },
                         enabled = index < meal.foods.lastIndex,
-                        modifier = Modifier.size(36.dp)
-                    ) { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "아래로") }
-                    IconButton(onClick = { onRemoveFood(index) }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Filled.Delete, contentDescription = "음식 삭제")
+                        modifier = Modifier.size(32.dp)
+                    ) { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "아래로", tint = colors.muted) }
+                    IconButton(onClick = { onRemoveFood(index) }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Filled.Delete, contentDescription = "음식 삭제", tint = colors.muted)
                     }
                 }
             }
@@ -302,58 +427,60 @@ private fun MealCard(
             // 자유 텍스트로 적던 시절의 기록. 지금은 그렇게 적을 방법이 없지만, 남아 있는
             // 기록을 화면에서 숨기면 사용자 입장에선 사라진 것과 같으므로 읽기 전용으로 보여준다.
             if (meal.foods.isEmpty() && meal.menuText.isNotBlank()) {
-                Column(Modifier.padding(vertical = 4.dp)) {
-                    Text(meal.menuText)
-                    Text(
-                        "예전 방식으로 적어둔 기록 · ${formatMacros(meal.macros)}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                Column(Modifier.padding(top = ShaSpacing.md)) {
+                    Text(meal.menuText, style = type.body, color = colors.bodyText)
+                    Text("예전 방식으로 적어둔 기록", style = type.caption, color = colors.muted)
                 }
             }
 
-            Row(
-                Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(onClick = onAddFood) { Text("음식 추가") }
-                OutlinedButton(onClick = onOpenPresets) { Text("내 식사") }
-            }
-
-            // 메모는 합계 아래가 아니라 위에 둔다 — 사람이 적은 글이 계산된 숫자보다 먼저 읽혀야 한다.
             if (meal.memo.isNotBlank()) {
                 Text(
-                    "메모  ${meal.memo}",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 6.dp)
+                    "메모  " + meal.memo,
+                    style = type.caption,
+                    color = colors.muted,
+                    modifier = Modifier.padding(top = ShaSpacing.md)
                 )
             }
 
-            if (meal.foods.isNotEmpty()) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = ShaSpacing.md),
+                horizontalArrangement = Arrangement.spacedBy(ShaSpacing.lg)
+            ) {
                 Text(
-                    "합계 ${formatMacros(meal.macros)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 4.dp)
+                    "+ 음식 추가",
+                    style = type.bodyStrong,
+                    color = colors.primary,
+                    modifier = Modifier
+                        .clickable(onClick = onAddFood)
+                        .padding(vertical = ShaSpacing.sm)
+                )
+                Text(
+                    "내 식사",
+                    style = type.bodyStrong,
+                    color = colors.muted,
+                    modifier = Modifier
+                        .clickable(onClick = onOpenPresets)
+                        .padding(vertical = ShaSpacing.sm)
                 )
             }
         }
     }
 }
 
-private fun formatFoodQuantity(food: DraftMealFood): String {
-    val qty = food.amount?.let { "${it.roundToInt()}${food.amountUnit.label}" }
-        ?: "×${formatNumber(food.multiplier)}"
-    return "$qty · ${formatMacros(food.macros)}"
-}
+private fun quantityLine(food: DraftMealFood): String =
+    food.amount?.let { "" + it.roundToInt() + food.amountUnit.label }
+        ?: ("×" + formatNumber(food.multiplier))
 
 private fun formatNumber(value: Double): String =
     if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString()
 
 /** 모르는 값은 0이 아니라 `?`로 적는다 — 0kcal로 적어두면 "안 먹었다"는 뜻이 돼버린다. */
-private fun formatMacros(m: Macros): String {
+private fun macroLine(m: Macros): String {
     fun v(value: Double?) = value?.roundToInt()?.toString() ?: "?"
-    return "${v(m.kcal)}kcal · 단백질 ${v(m.protein)}g · 탄수 ${v(m.carbs)}g · " +
-        "지방 ${v(m.fat)}g · 당 ${v(m.sugar)}g"
+    return "단백질 " + v(m.protein) + "g · 탄수 " + v(m.carbs) + "g · 지방 " + v(m.fat) +
+        "g · 당 " + v(m.sugar) + "g"
 }
+
 
 // ---------- 다이얼로그 ----------
 

@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.IosShare
@@ -37,6 +38,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import com.pkj.leanbulk.notify.AndroidRestAlarms
 import com.pkj.leanbulk.ui.MainViewModel
 import com.pkj.leanbulk.ui.SettingsScreen
+import com.pkj.leanbulk.ui.SubTabBar
 import com.pkj.leanbulk.ui.hasNotificationPermission
 import com.pkj.leanbulk.ui.TodayDietScreen
 import com.pkj.leanbulk.ui.TodayWorkoutScreen
@@ -152,11 +154,13 @@ private fun RootScreen(vm: MainViewModel) {
 @Composable
 private fun TodayScreen(vm: MainViewModel, subTab: Int, onSubTabChange: (Int) -> Unit) {
     androidx.compose.foundation.layout.Column {
-        TabRow(selectedTabIndex = subTab) {
-            Tab(selected = subTab == 0, onClick = { onSubTabChange(0) }, text = { Text("식단") })
-            Tab(selected = subTab == 1, onClick = { onSubTabChange(1) }, text = { Text("운동") })
-            Tab(selected = subTab == 2, onClick = { onSubTabChange(2) }, text = { Text("신체") })
-        }
+        // 밑줄 탭 대신 알약. 선택된 것이 배경으로 채워져서 흘긋 봐도 어디인지 읽힌다.
+        SubTabBar(
+            tabs = listOf("식단", "운동", "신체"),
+            selected = subTab,
+            onSelect = onSubTabChange,
+            modifier = androidx.compose.ui.Modifier.padding(horizontal = 16.dp)
+        )
         when (subTab) {
             0 -> TodayDietScreen(vm)
             1 -> TodayWorkoutScreen(vm)
