@@ -107,89 +107,108 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
+    val colors = ShaTheme.colors
+    val type = ShaTheme.type
+
+    ShaScreen {
     // 헤더까지 전부 한 LazyColumn 안에 넣어야 위로 같이 스크롤된다.
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = Modifier.fillMaxWidth().padding(horizontal = ShaSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(ShaSpacing.md)
     ) {
         item {
             Column {
-                HeaderRow(
+                ShaDateHeader(
                     date = date,
-                    totalVolume = draft.sumOf { it.volume },
-                    savedAt = savedAt,
-                    onDateChange = vm::setWorkoutDate
+                    subtitle = savedAt?.let { "저장됨 " + it } ?: "자동 저장",
+                    onDateChange = vm::setWorkoutDate,
+                    actionText = if (routineName.isBlank()) "루틴" else routineName,
+                    onAction = { showRoutinePicker = true }
                 )
 
-                WorkoutTimerButton(
-                    session = session,
-                    nowEpochMs = now,
-                    isToday = date == today,
-                    onStart = vm::startWorkout,
-                    onEnd = vm::endWorkout,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // 루틴 이름은 길 수 있으므로 남는 폭을 다 쓰고 넘치면 … 으로 자른다.
-                    OutlinedButton(
-                        onClick = { showRoutinePicker = true },
+                Row(horizontalArrangement = Arrangement.spacedBy(ShaSpacing.md)) {
+                    StatTile(
+                        label = "총 볼륨",
+                        value = draft.sumOf { it.volume }.toInt().toString(),
+                        unit = "kg",
+                        delta = if (draft.isEmpty()) null else "종목 " + draft.size + "개",
                         modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = if (routineName.isBlank()) "루틴 선택" else routineName,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
-                    }
-                    // 연결만 떼는 버튼. 종목은 그대로 두고 자동 반영만 멈춘다.
-                    if (routineName.isNotBlank()) {
-                        IconButton(onClick = vm::clearRoutine) {
-                            Icon(Icons.Filled.LinkOff, contentDescription = "루틴 연결 해제")
-                        }
-                    }
-                }
-
-                // 편집이 루틴을 조용히 바꾸는 동작이라, 지금 그러는 중인지 화면에 적어둔다.
-                if (routineName.isNotBlank()) {
-                    Text(
-                        text = when {
-                            date != today -> "지난 날짜라 '$routineName' 루틴에는 반영되지 않습니다"
-                            routineSynced -> "'$routineName' 루틴에 반영됨"
-                            else -> "고치면 '$routineName' 루틴에 반영됩니다"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    StatTile(
+                        label = "운동 시간",
+                        value = formatClock((session?.elapsedMs(now) ?: 0L) / 1000),
+                        unit = "",
+                        delta = if (session?.running == true) "재는 중" else null,
+                        deltaTone = if (session?.running == true) colors.primary else null,
+                        modifier = Modifier.weight(1f)
                     )
                 }
 
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = { showAddExercise = true },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("종목 추가", maxLines = 1) }
-                    OutlinedButton(
-                        onClick = { showSaveRoutine = true },
-                        enabled = draft.isNotEmpty(),
-                        modifier = Modifier.weight(1f)
-                    ) { Text("루틴으로 저장", maxLines = 1) }
+                WorkoutTimerButton(
+                    session = session,
+                    isToday = date == today,
+                    onStart = vm::startWorkout,
+                    onEnd = vm::endWorkout,
+                    modifier = Modifier.padding(top = ShaSpacing.md)
+                )
+
+                // 편집이 루틴을 조용히 바꾸는 동작이라, 지금 그러는 중인지 화면에 적어둔다.
+                if (routineName.isNotBlank()) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = ShaSpacing.md),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = when {
+                                date != today -> "지난 날짜라 '" + routineName + "' 루틴에는 반영되지 않습니다"
+                                routineSynced -> "'" + routineName + "' 루틴에 반영됨"
+                                else -> "고치면 '" + routineName + "' 루틴에 반영됩니다"
+                            },
+                            style = type.caption,
+                            color = colors.muted,
+                            modifier = Modifier.weight(1f)
+                        )
+                        // 연결만 뗀다. 종목은 그대로 두고 자동 반영만 멈춘다.
+                        Text(
+                            "연결 해제",
+                            style = type.caption,
+                            color = colors.primary,
+                            modifier = Modifier
+                                .clickable(onClick = vm::clearRoutine)
+                                .padding(ShaSpacing.sm)
+                        )
+                    }
                 }
 
-                HorizontalDivider(Modifier.padding(vertical = 12.dp))
+                Row(
+                    Modifier.fillMaxWidth().padding(top = ShaSpacing.lg, bottom = ShaSpacing.xs),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("종목", style = type.h2, color = colors.ink, modifier = Modifier.weight(1f))
+                    if (draft.isNotEmpty()) {
+                        Text(
+                            "루틴으로 저장",
+                            style = type.bodyStrong,
+                            color = colors.primary,
+                            modifier = Modifier
+                                .clickable { showSaveRoutine = true }
+                                .padding(vertical = ShaSpacing.sm)
+                        )
+                    }
+                }
             }
         }
 
         if (draft.isEmpty()) {
-            item { Text("루틴을 선택하거나 종목을 추가하세요.") }
+            item {
+                Text(
+                    "루틴을 고르거나 종목을 더하세요.",
+                    style = type.body,
+                    color = colors.muted,
+                    modifier = Modifier.padding(vertical = ShaSpacing.md)
+                )
+            }
         } else {
             itemsIndexed(draft) { exIndex, exercise ->
                 ExerciseCard(
@@ -205,6 +224,14 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
                     onEditMemo = { memoFor = exIndex }
                 )
             }
+        }
+
+        item {
+            DashedAddButton(
+                text = "종목 추가",
+                onClick = { showAddExercise = true },
+                modifier = Modifier.padding(top = ShaSpacing.xs)
+            )
         }
 
         // 휴식 창이 마지막 카드를 가리지 않도록 아래를 비워둔다.
@@ -354,15 +381,19 @@ private fun ExerciseCard(
     onSetChange: (Int, (DraftSet) -> DraftSet) -> Unit,
     onEditMemo: () -> Unit
 ) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
+    val colors = ShaTheme.colors
+    val type = ShaTheme.type
+
+    ShaCard {
+        Column {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     // 화살표 두 개가 자리를 먹어서 긴 이름은 한 줄에 안 들어간다.
                     // 자르는 것보다 두 줄로 접히는 편이 낫다 — 이름 끝의 괄호 설명이 종목을 가른다.
                     Text(
                         exercise.name,
-                        fontWeight = FontWeight.Bold,
+                        style = type.h2,
+                        color = colors.ink,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -371,26 +402,30 @@ private fun ExerciseCard(
                             exercise.trackingType.label,
                             exercise.defaultSetting.takeIf { it.isNotBlank() }
                         ).joinToString(" · "),
-                        style = MaterialTheme.typography.bodySmall
+                        style = type.caption,
+                        color = colors.muted
                     )
                 }
-                // 새 종목은 늘 맨 아래에 붙는다. 원하는 자리로 끌어올리는 건 여기서 한다.
-                IconButton(onClick = onMoveUp, enabled = canMoveUp, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "위로")
-                }
-                IconButton(onClick = onMoveDown, enabled = canMoveDown, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "아래로")
-                }
-                IconButton(onClick = onRemoveExercise, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Filled.Delete, contentDescription = "종목 삭제")
+                // 무게를 안 쓰는 종목은 볼륨이라는 개념이 없어서 0kg만 뜬다. 아예 감춘다.
+                if (exercise.trackingType == TrackingType.WEIGHT_REPS ||
+                    exercise.trackingType == TrackingType.WEIGHT_TIME
+                ) {
+                    Text(exercise.volume.toInt().toString(), style = type.data, color = colors.ink)
+                    Text(
+                        "kg",
+                        style = type.caption,
+                        color = colors.muted,
+                        modifier = Modifier.padding(start = 2.dp)
+                    )
                 }
             }
 
             if (exercise.memo.isNotBlank()) {
                 Text(
-                    "메모  ${exercise.memo}",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 4.dp)
+                    "메모  " + exercise.memo,
+                    style = type.caption,
+                    color = colors.muted,
+                    modifier = Modifier.padding(top = ShaSpacing.xs)
                 )
             }
 
@@ -405,36 +440,47 @@ private fun ExerciseCard(
                 )
             }
 
+            // 카드 아래 줄은 전부 글자 버튼이다. 이 줄에 채운 버튼을 두면 종목마다
+            // 주 버튼이 하나씩 생겨서 화면에서 무엇을 먼저 눌러야 할지가 사라진다.
             Row(
-                Modifier.fillMaxWidth().padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Modifier.fillMaxWidth().padding(top = ShaSpacing.md),
+                horizontalArrangement = Arrangement.spacedBy(ShaSpacing.lg),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedButton(onClick = onAddSet) {
-                    Icon(Icons.Filled.Add, contentDescription = "세트 추가")
-                    Text("세트")
-                }
-                OutlinedButton(onClick = onRemoveSet) {
-                    Icon(Icons.Filled.Remove, contentDescription = "세트 삭제")
-                    Text("세트")
-                }
-                // 머리 줄에는 이미 아이콘이 셋이라 여기 붙인다 — 더 넣으면 종목 이름 자리가 없어진다.
-                IconButton(
-                    onClick = onEditMemo,
-                    modifier = Modifier.size(40.dp).testTag("exercise_memo_${exercise.name}")
-                ) {
-                    Icon(Icons.Filled.EditNote, contentDescription = "메모")
-                }
+                CardAction("세트 +", onAddSet)
+                CardAction("세트 −", onRemoveSet)
+                CardAction("메모", onEditMemo, Modifier.testTag("exercise_memo_" + exercise.name))
                 Box(Modifier.weight(1f))
-                // 무게를 안 쓰는 종목은 볼륨이라는 개념이 없어서 0kg만 뜬다. 아예 감춘다.
-                if (exercise.trackingType == TrackingType.WEIGHT_REPS ||
-                    exercise.trackingType == TrackingType.WEIGHT_TIME
-                ) {
-                    Text("볼륨 ${exercise.volume.toInt()}kg")
+                // 순서 조정·삭제는 자주 쓰지 않는다. 아이콘으로 작게 흐리게 둔다.
+                IconButton(onClick = onMoveUp, enabled = canMoveUp, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        Icons.Filled.KeyboardArrowUp, contentDescription = "위로",
+                        tint = if (canMoveUp) colors.muted else colors.border
+                    )
+                }
+                IconButton(onClick = onMoveDown, enabled = canMoveDown, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        Icons.Filled.KeyboardArrowDown, contentDescription = "아래로",
+                        tint = if (canMoveDown) colors.muted else colors.border
+                    )
+                }
+                IconButton(onClick = onRemoveExercise, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Filled.Delete, contentDescription = "종목 삭제", tint = colors.muted)
                 }
             }
         }
     }
+}
+
+/** 카드 안의 작은 글자 버튼. */
+@Composable
+private fun CardAction(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        style = ShaTheme.type.bodyStrong,
+        color = ShaTheme.colors.primary,
+        modifier = modifier.clickable(onClick = onClick).padding(vertical = ShaSpacing.sm)
+    )
 }
 
 /** 세트 번호 칸 폭. 머리글과 세트 줄이 같은 값을 써야 칸이 세로로 맞는다. */
@@ -458,14 +504,16 @@ private fun SetColumnHeader(trackingType: TrackingType) {
     ) {
         Text(
             "세트",
-            style = MaterialTheme.typography.labelSmall,
+            style = ShaTheme.type.caption,
+            color = ShaTheme.colors.muted,
             modifier = Modifier.width(SET_NUMBER_WIDTH),
             textAlign = TextAlign.Center
         )
         trackingType.columnLabels.forEach { label ->
             Text(
                 label,
-                style = MaterialTheme.typography.labelSmall,
+                style = ShaTheme.type.caption,
+                color = ShaTheme.colors.muted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
@@ -474,7 +522,8 @@ private fun SetColumnHeader(trackingType: TrackingType) {
         }
         Text(
             "완료",
-            style = MaterialTheme.typography.labelSmall,
+            style = ShaTheme.type.caption,
+            color = ShaTheme.colors.muted,
             modifier = Modifier.width(DONE_WIDTH),
             textAlign = TextAlign.Center
         )
@@ -504,8 +553,9 @@ private fun SetRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            "$setNumber",
-            style = MaterialTheme.typography.bodyMedium,
+            setNumber.toString(),
+            style = ShaTheme.type.dataSmall,
+            color = ShaTheme.colors.muted,
             modifier = Modifier.width(SET_NUMBER_WIDTH),
             textAlign = TextAlign.Center
         )

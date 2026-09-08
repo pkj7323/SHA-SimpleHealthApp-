@@ -1,14 +1,9 @@
 package com.pkj.leanbulk.ui
 
-import android.app.DatePickerDialog
 import androidx.compose.foundation.clickable
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.ui.graphics.Color
 import com.pkj.leanbulk.ui.theme.ShaSpacing
 import com.pkj.leanbulk.ui.theme.ShaTheme
-import java.time.format.TextStyle as JavaTextStyle
-import java.util.Locale
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -91,11 +86,12 @@ fun TodayDietScreen(vm: MainViewModel) {
             verticalArrangement = Arrangement.spacedBy(ShaSpacing.md)
         ) {
             item {
-                DateHeader(
+                ShaDateHeader(
                     date = date,
-                    savedAt = savedAt,
+                    subtitle = savedAt?.let { "저장됨 " + it } ?: "자동 저장",
                     onDateChange = vm::setDietDate,
-                    onOpenTarget = { showTargetDialog = true }
+                    actionText = "목표",
+                    onAction = { showTargetDialog = true }
                 )
             }
 
@@ -204,73 +200,6 @@ fun TodayDietScreen(vm: MainViewModel) {
             onDismiss = { savePresetFor = null }
         )
     }
-}
-
-/**
- * 날짜 줄. 달력을 열지 않고도 어제·내일로 갈 수 있게 화살표를 둔다 —
- * 실제로 옮기는 날짜는 대부분 하루 차이라 매번 달력을 띄우는 건 과하다.
- */
-@Composable
-private fun DateHeader(
-    date: String,
-    savedAt: String?,
-    onDateChange: (String) -> Unit,
-    onOpenTarget: () -> Unit
-) {
-    val colors = ShaTheme.colors
-    val type = ShaTheme.type
-    val context = LocalContext.current
-    val parsed = LocalDate.parse(date)
-
-    Row(
-        Modifier.fillMaxWidth().padding(top = ShaSpacing.lg, bottom = ShaSpacing.md),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = { onDateChange(parsed.minusDays(1).toString()) }) {
-            Icon(Icons.Filled.ChevronLeft, contentDescription = "하루 전", tint = colors.muted)
-        }
-        Column(
-            Modifier
-                .weight(1f)
-                .clickable {
-                    DatePickerDialog(
-                        context,
-                        { _, y, m, d -> onDateChange(LocalDate.of(y, m + 1, d).toString()) },
-                        parsed.year, parsed.monthValue - 1, parsed.dayOfMonth
-                    ).show()
-                }
-        ) {
-            Text(dateLabel(parsed), style = type.h1, color = colors.ink)
-            Text(
-                text = savedAt?.let { "저장됨 " + it } ?: "자동 저장",
-                style = type.caption,
-                color = colors.muted
-            )
-        }
-        IconButton(onClick = { onDateChange(parsed.plusDays(1).toString()) }) {
-            Icon(Icons.Filled.ChevronRight, contentDescription = "하루 뒤", tint = colors.muted)
-        }
-        Text(
-            "목표",
-            style = type.bodyStrong,
-            color = colors.primary,
-            modifier = Modifier
-                .clickable(onClick = onOpenTarget)
-                .padding(horizontal = ShaSpacing.md, vertical = ShaSpacing.md)
-        )
-    }
-}
-
-/** "9월 8일 (화)". 연도는 웬만하면 올해라 빼고, 요일은 기록을 되짚을 때 실제로 쓰인다. */
-private fun dateLabel(date: LocalDate): String {
-    val today = LocalDate.now()
-    val weekday = date.dayOfWeek.getDisplayName(JavaTextStyle.SHORT, Locale.KOREAN)
-    val head = when (date) {
-        today -> "오늘"
-        today.minusDays(1) -> "어제"
-        else -> "" + date.monthValue + "월 " + date.dayOfMonth + "일"
-    }
-    return head + " (" + weekday + ")"
 }
 
 /**

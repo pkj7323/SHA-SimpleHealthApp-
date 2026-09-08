@@ -1,10 +1,13 @@
 package com.pkj.leanbulk.ui
 
+import android.app.DatePickerDialog
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.window.Dialog
@@ -13,14 +16,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -36,6 +44,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pkj.leanbulk.ui.theme.ShaSpacing
 import com.pkj.leanbulk.ui.theme.ShaTheme
+import java.time.LocalDate
+import java.time.format.TextStyle as JavaTextStyle
+import java.util.Locale
 
 /**
  * 화면 하나를 감싸는 바탕. 좌우 여백과 배경색을 여기서 한 번에 정한다.
@@ -46,11 +57,12 @@ import com.pkj.leanbulk.ui.theme.ShaTheme
 @Composable
 fun ShaScreen(
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
+    // BoxScope로 받는다 — 휴식 창처럼 화면 위에 겹쳐 그리는 것이 `align`을 쓸 수 있어야 한다.
+    content: @Composable BoxScope.() -> Unit
 ) {
     Box(
         modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .background(ShaTheme.colors.surface)
     ) { content() }
 }
@@ -362,4 +374,76 @@ fun ShaTextField(
             }
         )
     }
+}
+
+/**
+ * 날짜 줄. 식단·운동·신체가 같은 것을 쓴다.
+ *
+ * 달력을 열지 않고도 어제·내일로 갈 수 있게 화살표를 둔다 — 실제로 옮기는 날짜는 대부분
+ * 하루 차이라 매번 달력을 띄우는 건 과하다. 날짜 글자를 누르면 달력이 열린다.
+ */
+@Composable
+fun ShaDateHeader(
+    date: String,
+    subtitle: String,
+    onDateChange: (String) -> Unit,
+    actionText: String? = null,
+    onAction: (() -> Unit)? = null
+) {
+    val colors = ShaTheme.colors
+    val type = ShaTheme.type
+    val context = LocalContext.current
+    val parsed = LocalDate.parse(date)
+
+    Row(
+        Modifier.fillMaxWidth().padding(top = ShaSpacing.lg, bottom = ShaSpacing.md),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = { onDateChange(parsed.minusDays(1).toString()) }) {
+            Icon(Icons.Filled.ChevronLeft, contentDescription = "하루 전", tint = colors.muted)
+        }
+        Column(
+            Modifier
+                .weight(1f)
+                .clickable {
+                    DatePickerDialog(
+                        context,
+                        { _, y, m, d -> onDateChange(LocalDate.of(y, m + 1, d).toString()) },
+                        parsed.year, parsed.monthValue - 1, parsed.dayOfMonth
+                    ).show()
+                }
+        ) {
+            Text(shaDateLabel(parsed), style = type.h1, color = colors.ink)
+            Text(subtitle, style = type.caption, color = colors.muted)
+        }
+        IconButton(onClick = { onDateChange(parsed.plusDays(1).toString()) }) {
+            Icon(Icons.Filled.ChevronRight, contentDescription = "하루 뒤", tint = colors.muted)
+        }
+        if (actionText != null && onAction != null) {
+            // 루틴 이름처럼 긴 글자가 들어올 수 있다. 폭을 막아 날짜 화살표를 밀어내지 않게 한다.
+            Text(
+                actionText,
+                style = type.bodyStrong,
+                color = colors.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .widthIn(max = 96.dp)
+                    .clickable(onClick = onAction)
+                    .padding(horizontal = ShaSpacing.md, vertical = ShaSpacing.md)
+            )
+        }
+    }
+}
+
+/** "9월 8일 (화)". 연도는 웬만하면 올해라 빼고, 요일은 기록을 되짚을 때 실제로 쓰인다. */
+fun shaDateLabel(date: LocalDate): String {
+    val today = LocalDate.now()
+    val weekday = date.dayOfWeek.getDisplayName(JavaTextStyle.SHORT, Locale.KOREAN)
+    val head = when (date) {
+        today -> "오늘"
+        today.minusDays(1) -> "어제"
+        else -> "" + date.monthValue + "월 " + date.dayOfMonth + "일"
+    }
+    return head + " (" + weekday + ")"
 }

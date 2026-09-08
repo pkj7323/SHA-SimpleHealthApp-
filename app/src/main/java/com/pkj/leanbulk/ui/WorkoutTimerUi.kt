@@ -46,50 +46,33 @@ import com.pkj.leanbulk.data.WorkoutSession
 @Composable
 fun WorkoutTimerButton(
     session: WorkoutSession?,
-    nowEpochMs: Long,
     isToday: Boolean,
     onStart: () -> Unit,
     onEnd: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val elapsed = session?.elapsedMs(nowEpochMs)?.div(1000) ?: 0L
-
-    if (!isToday) {
-        if (session != null) {
-            Text(
-                "이날 운동 시간 ${formatClock(elapsed)}",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = modifier.padding(top = 8.dp)
-            )
-        }
-        return
-    }
+    // 지난 날짜에는 버튼을 안 준다. 잰 시간은 위 타일이 이미 보여준다.
+    if (!isToday) return
 
     when {
-        session == null -> Button(
+        session == null -> ShaPrimaryButton(
+            text = "운동 시작",
             onClick = onStart,
             modifier = modifier.fillMaxWidth().testTag("workout_start")
-        ) {
-            Icon(Icons.Filled.PlayArrow, contentDescription = null)
-            Text("운동 시작")
-        }
+        )
 
-        session.running -> Button(
+        session.running -> ShaPrimaryButton(
+            text = "운동 종료",
             onClick = onEnd,
             modifier = modifier.fillMaxWidth().testTag("workout_end")
-        ) {
-            Icon(Icons.Filled.Stop, contentDescription = null)
-            Text("운동 종료 · ${formatClock(elapsed)}")
-        }
+        )
 
         // 끝낸 뒤에도 다시 이어서 할 수 있다. 시작 시각은 그대로 두고 끝 표시만 뗀다.
-        else -> Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("운동 시간 ${formatClock(elapsed)}", style = MaterialTheme.typography.titleSmall)
-            Box(Modifier.padding(horizontal = 4.dp))
-            TextButton(onClick = onStart, modifier = Modifier.testTag("workout_resume")) {
-                Text("이어서 하기")
-            }
-        }
+        else -> ShaSecondaryButton(
+            text = "이어서 하기",
+            onClick = onStart,
+            modifier = modifier.fillMaxWidth().testTag("workout_resume")
+        )
     }
 }
 

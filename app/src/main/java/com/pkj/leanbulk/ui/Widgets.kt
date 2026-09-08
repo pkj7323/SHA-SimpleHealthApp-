@@ -1,6 +1,6 @@
 package com.pkj.leanbulk.ui
 
-import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,6 +37,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.pkj.leanbulk.ui.theme.ShaTheme
 
 /**
  * 숫자 입력 + 좌우 증감 버튼. **세트 한 줄에 두 개가 들어가야 하므로 최대한 납작하다.**
@@ -122,15 +123,15 @@ private fun CompactNumberInput(
         value = text,
         onValueChange = onTextChange,
         singleLine = true,
-        textStyle = MaterialTheme.typography.bodyLarge.copy(
-            color = colors.onSurface,
+        textStyle = ShaTheme.type.dataSmall.copy(
+            color = ShaTheme.colors.ink,
             textAlign = TextAlign.Center
         ),
         cursorBrush = SolidColor(colors.primary),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = modifier
-            .height(40.dp)
-            .border(1.dp, colors.outline, RoundedCornerShape(8.dp))
+            .height(44.dp)
+            .background(ShaTheme.colors.surface, RoundedCornerShape(10.dp))
             .semantics { contentDescription = description },
         decorationBox = { field ->
             Box(
