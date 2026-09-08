@@ -76,7 +76,7 @@ class SnapshotCompletenessTest {
             "id", "presetId", "orderIndex", "foodId", "name", "multiplier", "amount", "amountUnit",
             "macros", "macroSource"
         )
-        assertFields<AppMeta>("id", "seedVersion", "restSeconds", "restNotifications")
+        assertFields<AppMeta>("id", "seedVersion", "restSeconds", "restNotifications", "themeMode")
         assertFields<WorkoutSession>(
             "date", "startedAtEpochMs", "accumulatedMs", "resumedAtEpochMs", "endedAtEpochMs"
         )

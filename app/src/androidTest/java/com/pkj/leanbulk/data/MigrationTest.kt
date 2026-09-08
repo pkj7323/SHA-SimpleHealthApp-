@@ -438,6 +438,27 @@ class MigrationTest {
             }
     }
 
+    /** 테마 칸이 늘어도 이미 저장된 설정은 그대로여야 한다. 기본은 어둡게. */
+    @Test
+    fun 테마_칸이_생겨도_기존_설정은_그대로다() {
+        helper.createDatabase(TEST_DB, 18).use { db ->
+            db.execSQL(
+                "INSERT INTO app_meta (id, seedVersion, restSeconds, restNotifications) " +
+                    "VALUES (1, 4, 150, 0)"
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, AppDatabase.VERSION, true, *AppDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT restSeconds, restNotifications, themeMode FROM app_meta").use { c ->
+                    assertTrue(c.moveToFirst())
+                    assertEquals("휴식 길이가 초기화됐다", 150, c.getInt(0))
+                    assertEquals("알림 설정이 초기화됐다", 0, c.getInt(1))
+                    assertEquals("DARK", c.getString(2))
+                }
+            }
+    }
+
     @Test
     fun 선언한_버전과_실제_DB_버전이_같다() {
         val db = helper.createDatabase(TEST_DB, AppDatabase.VERSION)

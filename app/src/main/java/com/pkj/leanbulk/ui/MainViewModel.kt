@@ -16,6 +16,7 @@ import com.pkj.leanbulk.data.MealPresetWithFoods
 import com.pkj.leanbulk.data.Repository
 import com.pkj.leanbulk.data.RoutineWithExercises
 import com.pkj.leanbulk.data.SeedData
+import com.pkj.leanbulk.data.ThemeMode
 import com.pkj.leanbulk.data.TrackingType
 import com.pkj.leanbulk.data.WorkoutSession
 import com.pkj.leanbulk.data.backup.DietTemplateDto
@@ -100,6 +101,17 @@ class MainViewModel(
 
     private val _restTimer = MutableStateFlow<RestTimer?>(null)
     val restTimer: StateFlow<RestTimer?> = _restTimer
+
+    /**
+     * 화면 테마. **처음 값을 [ThemeMode.DARK]로 둔다** — DB에서 읽어오기 전 한 프레임 동안
+     * 밝은 화면이 번쩍였다가 어두워지는 걸 막는다.
+     */
+    val themeMode: StateFlow<ThemeMode> = repository.observeThemeMode()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ThemeMode.DARK)
+
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch { repository.setThemeMode(mode) }
+    }
 
     /** 휴식이 끝났을 때 알림을 띄울지. 설정 화면에서 끄고 켠다. */
     val restNotifications: StateFlow<Boolean> = repository.observeRestNotifications()

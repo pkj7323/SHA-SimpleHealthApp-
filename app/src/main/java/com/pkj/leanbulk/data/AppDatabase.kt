@@ -363,6 +363,16 @@ internal val MIGRATION_17_18 = Migration(17, 18) { db ->
     db.execSQL("ALTER TABLE `app_meta` ADD COLUMN `restNotifications` INTEGER NOT NULL DEFAULT 1")
 }
 
+/**
+ * 화면 테마를 고를 수 있게 한다.
+ *
+ * 기존 사용자에게도 기본값 `DARK`가 들어간다. 쓰던 화면이 갑자기 어두워지는 셈이지만,
+ * 설정에서 한 번에 되돌릴 수 있고 이 앱의 색은 어두운 쪽 기준으로 잡혀 있다.
+ */
+internal val MIGRATION_18_19 = Migration(18, 19) { db ->
+    db.execSQL("ALTER TABLE `app_meta` ADD COLUMN `themeMode` TEXT NOT NULL DEFAULT 'DARK'")
+}
+
 @Database(
     entities = [
         MealEntry::class,
@@ -383,7 +393,7 @@ internal val MIGRATION_17_18 = Migration(17, 18) { db ->
         AppMeta::class,
         Exercise::class
     ],
-    version = 18,
+    version = 19,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -415,11 +425,11 @@ abstract class AppDatabase : RoomDatabase() {
         internal val MIGRATIONS = arrayOf(
             MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
             MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14,
-            MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18
+            MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19
         )
 
         /** 마이그레이션 테스트가 참조한다. `@Database`의 version과 항상 같아야 한다. */
-        internal const val VERSION = 18
+        internal const val VERSION = 19
 
         fun get(context: Context): AppDatabase =
             instance ?: synchronized(this) {

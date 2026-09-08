@@ -181,11 +181,11 @@ fun SubTabBar(
             Text(
                 text = label,
                 style = ShaTheme.type.bodyStrong,
-                color = if (on) colors.canvas else colors.muted,
+                color = if (on) colors.onPrimaryFill else colors.muted,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .background(
-                        if (on) colors.ink else Color.Transparent,
+                        if (on) colors.primaryFill else Color.Transparent,
                         RoundedCornerShape(10.dp)
                     )
                     .clickable { onSelect(index) }

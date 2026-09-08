@@ -19,12 +19,16 @@ import androidx.compose.ui.graphics.Color
  *
  * 그래서 역할을 갈랐다:
  *
- * | 쓰임 | 밝은 테마 | 대비 |
- * |---|---|---|
- * | 채우는 색 ([primaryFill]) | 라임 `#6FE26C` + 잉크 글자 | 11.1:1 |
- * | 글자·아이콘 ([primary]) | 딥그린 `#2E7D32` | 5.1:1 |
+ * | 쓰임 | 밝은 테마 | 어두운 테마 | 대비 |
+ * |---|---|---|---|
+ * | 채우는 색 ([primaryFill]) | 잉크 + 라임 글자 | 라임 + 잉크 글자 | 11.1:1 |
+ * | 글자·아이콘 ([primary]) | 딥그린 `#2E7D32` | 라임 | 5.1 / 11.1 |
  *
- * 어두운 테마에서는 라임이 바탕과 11:1이라 **글자로도 쓸 수 있어서** 둘이 같아진다.
+ * **채우는 색은 늘 배경의 반대다.** 어두운 테마는 바탕 자체가 잉크라, 잉크로 채운 버튼이
+ * 배경에 묻힌다. 뒤집으면 같은 색 한 쌍(잉크·라임)으로 양쪽 테마가 다 해결된다.
+ *
+ * 글자용은 다르다 — 라임은 밝아서 흰 바탕 위에서 1.6:1이라 안 보이므로 밝은 테마에서만
+ * 딥그린으로 내려 쓴다. 어두운 테마는 라임이 바탕과 11:1이라 그대로 쓴다.
  *
  * 이 규칙을 어기면(라임을 링크 글자에 쓰면) 화면은 예뻐 보이는데 밝은 데서 안 읽힌다.
  */
@@ -66,8 +70,8 @@ val LightShaColors = ShaColors(
     bodyText = Color(0xFF4E5348),
     ink = BrandInk,
     primary = Color(0xFF2E7D32),
-    primaryFill = BrandLime,
-    onPrimaryFill = BrandInk,
+    primaryFill = BrandInk,
+    onPrimaryFill = BrandLime,
     primaryWeakBg = Color(0xFFE8F8E7),
     primaryWeakFg = Color(0xFF2E7D32),
     // 목표 도달 같은 "잘 됐다"는 브랜드색과 같은 갈래다. 굳이 다른 초록을 하나 더 두지 않는다.

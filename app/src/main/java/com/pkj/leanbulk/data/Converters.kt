@@ -44,6 +44,13 @@ class Converters {
         runCatching { ActivityLevel.valueOf(value) }.getOrDefault(ActivityLevel.MEDIUM)
 
     @TypeConverter
+    fun themeModeToString(value: ThemeMode): String = value.name
+
+    @TypeConverter
+    fun stringToThemeMode(value: String): ThemeMode =
+        runCatching { ThemeMode.valueOf(value) }.getOrDefault(ThemeMode.DARK)
+
+    @TypeConverter
     fun amountUnitToString(value: AmountUnit): String = value.name
 
     @TypeConverter

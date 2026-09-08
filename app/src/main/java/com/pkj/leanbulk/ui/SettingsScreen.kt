@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -35,12 +36,14 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.pkj.leanbulk.BuildConfig
+import com.pkj.leanbulk.data.ThemeMode
 import androidx.compose.runtime.DisposableEffect
 
 @Composable
 fun SettingsScreen(vm: MainViewModel) {
     val context = LocalContext.current
     val restNotifications by vm.restNotifications.collectAsState()
+    val themeMode by vm.themeMode.collectAsState()
 
     /**
      * 시스템 알림 권한 상태. **화면으로 돌아올 때마다 다시 본다** — 설정 앱에 갔다가 켜고
@@ -63,6 +66,25 @@ fun SettingsScreen(vm: MainViewModel) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("설정", style = MaterialTheme.typography.titleLarge)
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("화면", style = MaterialTheme.typography.titleMedium)
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ThemeMode.entries.forEach { mode ->
+                        FilterChip(
+                            selected = themeMode == mode,
+                            onClick = { vm.setThemeMode(mode) },
+                            label = { Text(mode.label) },
+                            modifier = Modifier.testTag("theme_" + mode.name)
+                        )
+                    }
+                }
+            }
+        }
 
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

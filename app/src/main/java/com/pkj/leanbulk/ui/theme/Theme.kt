@@ -7,6 +7,8 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.ui.graphics.Color
+import com.pkj.leanbulk.data.ThemeMode
 
 /**
  * 새 디자인 토큰을 꺼내 쓰는 자리. `MaterialTheme.colorScheme` 대신 이걸 쓴다.
@@ -21,6 +23,14 @@ object ShaTheme {
 
     val type: ShaTypography
         @Composable @ReadOnlyComposable get() = LocalShaTypography.current
+}
+
+/** [ThemeMode.SYSTEM]일 때만 폰 설정을 본다. 나머지는 사용자가 고른 대로. */
+@Composable
+fun ThemeMode.isDark(): Boolean = when (this) {
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
+    ThemeMode.SYSTEM -> isSystemInDarkTheme()
 }
 
 @Composable
@@ -45,12 +55,30 @@ fun SimpleHealthTheme(
             outline = sha.borderStrong,
             outlineVariant = sha.border,
             error = sha.danger,
-            // 하단 탭·시트가 이 색을 쓴다. 안 정하면 M3가 제 보라 컨테이너를 깐다.
-            surfaceContainer = sha.surfaceRaised,
+            // 카드·하단탭·시트가 이 계열을 쓴다. **하나라도 빼먹으면 그 부품만 보라로 남는다** —
+            // M3는 안 채운 토큰에 제 기본 보라 틴트를 그대로 쓴다.
+            surfaceContainerLowest = sha.surfaceRaised,
             surfaceContainerLow = sha.surfaceRaised,
+            surfaceContainer = sha.surfaceRaised,
             surfaceContainerHigh = sha.surface,
+            surfaceContainerHighest = sha.surface,
+            surfaceDim = sha.surface,
+            surfaceBright = sha.surfaceRaised,
+            inverseSurface = sha.ink,
+            inverseOnSurface = sha.canvas,
             secondaryContainer = sha.primaryWeakBg,
-            onSecondaryContainer = sha.primaryWeakFg
+            onSecondaryContainer = sha.primaryWeakFg,
+            tertiary = sha.primary,
+            onTertiary = sha.canvas,
+            tertiaryContainer = sha.primaryWeakBg,
+            onTertiaryContainer = sha.primaryWeakFg,
+            onSecondary = sha.canvas,
+            // **다른 컨테이너와 같은 색을 주면 안 된다.** M3는 배경색으로 글자색을 역추적하는데
+            // (`contentColorFor`), 값이 겹치면 엉뚱한 쪽이 먼저 걸려서 제목이 빨갛게 나온다.
+            errorContainer = Color(0xFFFDEBEC),
+            onErrorContainer = Color(0xFF8C1D18),
+            onError = sha.canvas,
+            scrim = sha.ink
         )
     } else {
         lightColorScheme(
@@ -67,11 +95,26 @@ fun SimpleHealthTheme(
             outline = sha.borderStrong,
             outlineVariant = sha.border,
             error = sha.danger,
-            surfaceContainer = sha.surfaceRaised,
+            surfaceContainerLowest = sha.canvas,
             surfaceContainerLow = sha.surfaceRaised,
-            surfaceContainerHigh = sha.surface,
+            surfaceContainer = sha.surfaceRaised,
+            surfaceContainerHigh = sha.surfaceRaised,
+            surfaceContainerHighest = sha.border,
+            surfaceDim = sha.surface,
+            surfaceBright = sha.surfaceRaised,
+            inverseSurface = sha.ink,
+            inverseOnSurface = sha.canvas,
             secondaryContainer = sha.primaryWeakBg,
-            onSecondaryContainer = sha.primaryWeakFg
+            onSecondaryContainer = sha.primaryWeakFg,
+            tertiary = sha.primary,
+            onTertiary = sha.canvas,
+            tertiaryContainer = sha.primaryWeakBg,
+            onTertiaryContainer = sha.primaryWeakFg,
+            onSecondary = sha.canvas,
+            errorContainer = Color(0xFF3B1F20),
+            onErrorContainer = Color(0xFFFFB4AB),
+            onError = sha.canvas,
+            scrim = Color.Black
         )
     }
 

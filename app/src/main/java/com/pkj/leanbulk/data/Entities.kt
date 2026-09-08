@@ -322,8 +322,21 @@ data class AppMeta(
      * 시스템 알림 권한과는 다른 층이다 — 권한은 "이 앱이 알림을 띄울 수 있나"이고 이건
      * "띄우고 싶나"다. 꺼두면 권한이 있어도 알람 자체를 안 건다.
      */
-    @ColumnInfo(defaultValue = "1") val restNotifications: Boolean = true
+    @ColumnInfo(defaultValue = "1") val restNotifications: Boolean = true,
+    /** 화면을 밝게 볼지 어둡게 볼지. 기본은 어둡게 — 이 앱은 헬스장에서 많이 열린다. */
+    @ColumnInfo(defaultValue = "DARK") val themeMode: ThemeMode = ThemeMode.DARK
 )
+
+/**
+ * 화면 테마.
+ *
+ * [SYSTEM]을 기본으로 두지 않는 이유는, 이 앱의 색이 어두운 쪽을 기준으로 잡혀 있어서다
+ * (브랜드 라임이 어두운 바탕에서 11:1로 제일 잘 산다). 폰 설정을 따라가고 싶은 사람은
+ * 설정에서 고르면 된다.
+ */
+enum class ThemeMode(val label: String) {
+    LIGHT("밝게"), DARK("어둡게"), SYSTEM("시스템 설정")
+}
 
 /**
  * 종목을 무엇으로 재는지. 종목마다 붙어 있고, 고르는 순간 입력 칸이 이걸 따라 바뀐다.

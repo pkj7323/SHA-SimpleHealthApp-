@@ -44,6 +44,7 @@ import com.pkj.leanbulk.ui.TodayDietScreen
 import com.pkj.leanbulk.ui.TodayWorkoutScreen
 import com.pkj.leanbulk.ui.ViewModelFactory
 import com.pkj.leanbulk.ui.theme.SimpleHealthTheme
+import com.pkj.leanbulk.ui.theme.isDark
 
 class MainActivity : ComponentActivity() {
 
@@ -82,7 +83,8 @@ class MainActivity : ComponentActivity() {
             askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         setContent {
-            SimpleHealthTheme {
+            val themeMode by viewModel.themeMode.collectAsState()
+            SimpleHealthTheme(darkTheme = themeMode.isDark()) {
                 Surface {
                     RootScreen(viewModel)
                 }

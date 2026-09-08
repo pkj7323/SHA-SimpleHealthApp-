@@ -266,6 +266,14 @@ class Repository(private val db: AppDatabase) {
         appMetaDao.upsert(currentMeta().copy(restNotifications = enabled))
     }
 
+    /** 화면 테마. 기본은 어둡게. */
+    fun observeThemeMode(): Flow<ThemeMode> =
+        appMetaDao.observeThemeMode().map { it ?: ThemeMode.DARK }
+
+    suspend fun setThemeMode(mode: ThemeMode) {
+        appMetaDao.upsert(currentMeta().copy(themeMode = mode))
+    }
+
     /**
      * 지금 저장된 설정 한 줄. `app_meta`는 통째로 덮어쓰는 REPLACE라 **읽어서 고쳐 쓰지 않으면
      * 옆 칸이 기본값으로 되돌아간다**(휴식 길이를 바꿨더니 알림 설정이 켜지는 식).
@@ -273,7 +281,8 @@ class Repository(private val db: AppDatabase) {
     private suspend fun currentMeta(): AppMeta = AppMeta(
         seedVersion = seedVersion(),
         restSeconds = restSeconds(),
-        restNotifications = appMetaDao.restNotifications() ?: true
+        restNotifications = appMetaDao.restNotifications() ?: true,
+        themeMode = appMetaDao.themeMode() ?: ThemeMode.DARK
     )
 
     // ---------- 루틴 ----------

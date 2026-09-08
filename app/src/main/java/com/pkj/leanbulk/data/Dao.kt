@@ -348,6 +348,12 @@ interface AppMetaDao {
     @Query("SELECT restNotifications FROM app_meta WHERE id = 1")
     suspend fun restNotifications(): Boolean?
 
+    @Query("SELECT themeMode FROM app_meta WHERE id = 1")
+    fun observeThemeMode(): Flow<ThemeMode?>
+
+    @Query("SELECT themeMode FROM app_meta WHERE id = 1")
+    suspend fun themeMode(): ThemeMode?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(meta: AppMeta)
 }
