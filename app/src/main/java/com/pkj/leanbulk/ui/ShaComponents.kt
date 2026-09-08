@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,9 +40,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.pkj.leanbulk.ui.theme.ShaSpacing
 import com.pkj.leanbulk.ui.theme.ShaTheme
 import java.time.LocalDate
@@ -452,4 +455,50 @@ fun shaDateLabel(date: LocalDate): String {
         else -> "" + date.monthValue + "월 " + date.dayOfMonth + "일"
     }
     return head + " (" + weekday + ")"
+}
+
+/**
+ * 그대로 복사해 갈 수 있는 텍스트 덩어리.
+ *
+ * **여기 담긴 글은 꾸미지 않는다.** 색을 입히거나 줄마다 다른 크기를 주면 화면에서는
+ * 예뻐 보여도 복사해서 붙이면 아무 뜻이 없다. 이 앱에서 히스토리 상세는 "옮겨 담기 위한
+ * 글"이므로, 서식은 바깥 카드가 지고 안쪽은 등폭 한 벌로만 그린다.
+ *
+ * 바깥에 클릭을 걸지 않는다 — 길게 눌러 드래그하는 "글자 선택" 제스처를 가로채기 때문이다.
+ */
+@Composable
+fun CopyableHistoryBlock(
+    text: String,
+    onCopy: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = ShaTheme.colors
+    Column(
+        modifier
+            .fillMaxWidth()
+            .background(colors.surface, RoundedCornerShape(12.dp))
+            .padding(ShaSpacing.md)
+    ) {
+        Row(Modifier.fillMaxWidth()) {
+            Box(Modifier.weight(1f))
+            Text(
+                "복사",
+                style = ShaTheme.type.caption,
+                color = colors.primary,
+                modifier = Modifier
+                    .clickable(onClick = onCopy)
+                    .padding(horizontal = ShaSpacing.md, vertical = ShaSpacing.sm)
+                    .testTag("history_copy")
+            )
+        }
+        SelectionContainer {
+            Text(
+                text = text,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.5.sp,
+                lineHeight = 22.sp,
+                color = colors.bodyText
+            )
+        }
+    }
 }

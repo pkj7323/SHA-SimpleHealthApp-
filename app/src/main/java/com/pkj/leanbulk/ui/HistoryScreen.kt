@@ -1,17 +1,18 @@
 package com.pkj.leanbulk.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material3.Card
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -19,16 +20,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.pkj.leanbulk.data.ExerciseWithSets
 import com.pkj.leanbulk.data.MealEntry
 import com.pkj.leanbulk.data.WorkoutSession
 import com.pkj.leanbulk.data.hasContent
+import com.pkj.leanbulk.ui.theme.ShaSpacing
+import com.pkj.leanbulk.ui.theme.ShaTheme
+import java.time.LocalDate
 import kotlin.math.roundToInt
 
 @Composable
@@ -54,14 +57,44 @@ fun HistoryScreen(vm: MainViewModel) {
             }
     }
 
-    LazyColumn(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        items(days, key = { it.date }) { day ->
-            DayCard(
-                date = day.date,
-                dayMeals = day.meals,
-                dayWorkouts = day.workouts,
-                session = day.session
-            )
+    val colors = ShaTheme.colors
+    val type = ShaTheme.type
+
+    ShaScreen {
+        LazyColumn(
+            Modifier.fillMaxWidth().padding(horizontal = ShaSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(ShaSpacing.md)
+        ) {
+            item {
+                Text(
+                    "히스토리",
+                    style = type.h1,
+                    color = colors.ink,
+                    modifier = Modifier.padding(top = ShaSpacing.lg, bottom = ShaSpacing.md)
+                )
+            }
+
+            if (days.isEmpty()) {
+                item {
+                    Text(
+                        "아직 기록이 없습니다.",
+                        style = type.body,
+                        color = colors.muted,
+                        modifier = Modifier.padding(vertical = ShaSpacing.md)
+                    )
+                }
+            }
+
+            items(days, key = { it.date }) { day ->
+                DayCard(
+                    date = day.date,
+                    dayMeals = day.meals,
+                    dayWorkouts = day.workouts,
+                    session = day.session
+                )
+            }
+
+            item { Box(Modifier.padding(bottom = ShaSpacing.xl)) }
         }
     }
 }
@@ -81,75 +114,98 @@ private fun DayCard(
     session: WorkoutSession?
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val colors = ShaTheme.colors
+    val type = ShaTheme.type
 
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            // 펼치기/접기는 이 헤더에만 건다. 아래 상세 텍스트에 클릭이 걸리면
-            // 길게 눌러 드래그하는 "텍스트 선택" 제스처를 가로채버리기 때문.
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded }
+    // 빈 칸(아무것도 안 담은 끼니)은 세지 않는다 — 고정 네 칸이라 늘 같이 저장된다.
+    val filled = dayMeals.filter { it.hasContent }
+    val kcal = filled.sumOf { it.macros.kcal ?: 0.0 }.roundToInt()
+
+    ShaCard {
+        Column {
+            // 펼치기/접기는 이 머리 줄에만 건다. 아래 상세 텍스트에 클릭이 걸리면
+            // 길게 눌러 드래그하는 "글자 선택" 제스처를 가로채버리기 때문.
+            Row(
+                Modifier.fillMaxWidth().clickable { expanded = !expanded },
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(date, fontWeight = FontWeight.Bold)
-
-                // 빈 칸(아무것도 안 담은 끼니)은 세지 않는다 — 고정 네 칸이라 늘 같이 저장된다.
-                val filled = dayMeals.filter { it.hasContent }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        shaDateLabel(LocalDate.parse(date)),
+                        style = type.bodyStrong,
+                        color = colors.ink
+                    )
+                    Text(
+                        summaryLine(filled.size, dayWorkouts, session, memoCount(filled, dayWorkouts)),
+                        style = type.caption,
+                        color = colors.muted
+                    )
+                }
+                // 그날을 훑을 때 눈이 먼저 가는 숫자는 칼로리다. 없는 날엔 자리도 비운다.
                 if (filled.isNotEmpty()) {
-                    val kcal = filled.sumOf { it.macros.kcal ?: 0.0 }.roundToInt()
-                    val protein = filled.sumOf { it.macros.protein ?: 0.0 }.roundToInt()
-                    Text("식단: ${kcal}kcal · 단백질 ${protein}g (${filled.size}끼니)")
+                    Text(kcal.toString(), style = type.data, color = colors.ink)
+                    Text(
+                        "kcal",
+                        style = type.caption,
+                        color = colors.muted,
+                        modifier = Modifier.padding(start = 2.dp)
+                    )
                 }
-                if (dayWorkouts.isNotEmpty()) {
-                    val routine = dayWorkouts.first().exercise.routineName.ifBlank { "운동" }
-                    Text("$routine · 총 볼륨 ${dayWorkouts.sumOf { it.volume }.roundToInt()}kg (${dayWorkouts.size}종목)")
-                }
-                // 아직 안 끝낸 운동은 시간을 안 적는다(`finishedMs`가 null).
-                session?.finishedMs?.let {
-                    Text("운동 시간 ${formatClock(it / 1000)}", style = MaterialTheme.typography.bodySmall)
-                }
-                if (filled.isEmpty() && dayWorkouts.isEmpty()) {
-                    Text("기록 없음")
-                }
-
-                // 메모는 펼쳐야 보이므로, 접힌 상태에서도 있다는 것만 알려준다.
-                val memoCount = filled.count { it.memo.isNotBlank() } +
-                    dayWorkouts.count { it.exercise.memo.isNotBlank() }
-                if (memoCount > 0) {
-                    Text("메모 ${memoCount}개", style = MaterialTheme.typography.bodySmall)
-                }
-
-                Text(
-                    if (expanded) "▲ 접기" else "▼ 자세히 보기",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 6.dp)
+                Icon(
+                    if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = if (expanded) "접기" else "자세히 보기",
+                    tint = colors.muted,
+                    modifier = Modifier.padding(start = ShaSpacing.sm)
                 )
             }
 
             if (expanded) {
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
-
                 // 펼칠 때마다 문자열을 다시 만들 필요는 없다.
                 val detail = remember(dayMeals, dayWorkouts, session) {
                     buildDayDetail(date, dayMeals, dayWorkouts, session)
                 }
                 val clipboard = LocalClipboardManager.current
 
-                SelectionContainer {
-                    Text(
-                        text = detail,
-                        fontFamily = FontFamily.Monospace,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-
-                OutlinedButton(
-                    onClick = { clipboard.setText(AnnotatedString(detail)) },
-                    modifier = Modifier.padding(top = 8.dp)
-                ) { Text("전체 복사") }
+                CopyableHistoryBlock(
+                    text = detail,
+                    onCopy = { clipboard.setText(AnnotatedString(detail)) },
+                    modifier = Modifier.padding(top = ShaSpacing.md)
+                )
             }
         }
     }
+}
+
+/** 메모는 펼쳐야 보이므로, 접힌 상태에서도 있다는 것만 알려준다. */
+private fun memoCount(meals: List<MealEntry>, workouts: List<ExerciseWithSets>): Int =
+    meals.count { it.memo.isNotBlank() } + workouts.count { it.exercise.memo.isNotBlank() }
+
+/**
+ * 카드 접힌 상태의 한 줄 요약.
+ *
+ * 예전엔 식단·운동·시간·메모가 각자 한 줄씩이라 카드 하나가 다섯 줄이었다. 날짜만
+ * 훑으려는 화면인데 카드가 커서 한 화면에 사흘이 안 들어왔다.
+ */
+private fun summaryLine(
+    mealCount: Int,
+    workouts: List<ExerciseWithSets>,
+    session: WorkoutSession?,
+    memos: Int
+): String {
+    val parts = buildList {
+        if (workouts.isNotEmpty()) {
+            val routine = workouts.first().exercise.routineName.ifBlank { "운동" }
+            add(routine + " " + workouts.size + "종목")
+            // 볼륨은 운동한 날의 핵심 숫자다. 무게를 안 쓰는 종목만 한 날은 0이라 뺀다.
+            val volume = workouts.sumOf { it.volume }.roundToInt()
+            if (volume > 0) add(volume.toString() + "kg")
+        }
+        // 아직 안 끝낸 운동은 시간을 안 적는다(`finishedMs`가 null).
+        session?.finishedMs?.let { add(formatClock(it / 1000)) }
+        if (mealCount > 0) add(mealCount.toString() + "끼니")
+        if (memos > 0) add("메모 " + memos)
+    }
+    return if (parts.isEmpty()) "기록 없음" else parts.joinToString(" · ")
 }
 
 /** 그날 기록을 사람이 읽기 좋은(그리고 복사해서 붙여넣기 좋은) 텍스트로 만든다. */
