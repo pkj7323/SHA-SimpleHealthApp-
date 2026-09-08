@@ -315,7 +315,14 @@ data class AppMeta(
      * 타이머에서 −/+로 고치면 그 값이 다음 세트의 기본이 된다. 사람마다, 종목마다 쉬는
      * 시간이 다른데 앱을 켤 때마다 90초로 돌아가면 매번 다시 맞춰야 한다.
      */
-    @ColumnInfo(defaultValue = "90") val restSeconds: Int = 90
+    @ColumnInfo(defaultValue = "90") val restSeconds: Int = 90,
+    /**
+     * 휴식이 끝났을 때 알림을 띄울지.
+     *
+     * 시스템 알림 권한과는 다른 층이다 — 권한은 "이 앱이 알림을 띄울 수 있나"이고 이건
+     * "띄우고 싶나"다. 꺼두면 권한이 있어도 알람 자체를 안 건다.
+     */
+    @ColumnInfo(defaultValue = "1") val restNotifications: Boolean = true
 )
 
 /**

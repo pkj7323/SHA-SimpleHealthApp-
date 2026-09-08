@@ -342,6 +342,12 @@ interface AppMetaDao {
     @Query("SELECT restSeconds FROM app_meta WHERE id = 1")
     suspend fun restSeconds(): Int?
 
+    @Query("SELECT restNotifications FROM app_meta WHERE id = 1")
+    fun observeRestNotifications(): Flow<Boolean?>
+
+    @Query("SELECT restNotifications FROM app_meta WHERE id = 1")
+    suspend fun restNotifications(): Boolean?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(meta: AppMeta)
 }

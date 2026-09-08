@@ -1,12 +1,6 @@
 package com.pkj.leanbulk.ui
 
-import android.Manifest
 import android.app.DatePickerDialog
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -84,26 +78,6 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
     val restTimer by vm.restTimer.collectAsState()
     val now by vm.now.collectAsState()
 
-    /**
-     * 휴식 알림을 띄우려면 안드로이드 13부터는 사용자가 켜줘야 한다. **운동을 시작할 때**
-     * 물어본다 — 앱을 처음 켜자마자 물으면 무슨 알림인지 모르는 채로 거절하기 쉽다.
-     *
-     * 켜주든 말든 운동은 시작한다. 알림은 있으면 좋은 것이지 없으면 못 쓰는 게 아니다
-     * (거절해도 진동은 울린다).
-     */
-    val context = LocalContext.current
-    val askNotifications = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { }
-    fun startWorkout() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-        vm.startWorkout()
-    }
 
     var showRoutinePicker by remember { mutableStateOf(false) }
     var showAddExercise by remember { mutableStateOf(false) }
@@ -151,7 +125,7 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
                     session = session,
                     nowEpochMs = now,
                     isToday = date == today,
-                    onStart = ::startWorkout,
+                    onStart = vm::startWorkout,
                     onEnd = vm::endWorkout,
                     modifier = Modifier.padding(top = 8.dp)
                 )

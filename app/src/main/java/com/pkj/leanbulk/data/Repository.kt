@@ -14,6 +14,7 @@ import com.pkj.leanbulk.data.backup.SnapshotCodec.toEntityPairs
 import com.pkj.leanbulk.data.backup.SnapshotCodec.toSession
 import com.pkj.leanbulk.data.backup.SnapshotCodec.toWorkoutDayDtos
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 /**
  * 휴식 타이머의 기본 길이. 아직 한 번도 안 고쳤을 때 쓴다.
@@ -86,7 +87,7 @@ class Repository(private val db: AppDatabase) {
             SeedData.foodCatalog.forEach { foodDao.upsertSeed(it.toEntity()) }
         }
 
-        appMetaDao.upsert(AppMeta(seedVersion = SeedData.VERSION, restSeconds = restSeconds()))
+        appMetaDao.upsert(currentMeta().copy(seedVersion = SeedData.VERSION))
     }
 
     suspend fun seedVersion(): Int = appMetaDao.seedVersion() ?: 0
@@ -254,8 +255,26 @@ class Repository(private val db: AppDatabase) {
     suspend fun restSeconds(): Int = appMetaDao.restSeconds() ?: DEFAULT_REST_SECONDS
 
     suspend fun setRestSeconds(seconds: Int) {
-        appMetaDao.upsert(AppMeta(seedVersion = seedVersion(), restSeconds = seconds))
+        appMetaDao.upsert(currentMeta().copy(restSeconds = seconds))
     }
+
+    /** 휴식이 끝났을 때 알림을 띄울지. 꺼두면 알람 자체를 안 건다. */
+    fun observeRestNotifications(): Flow<Boolean> =
+        appMetaDao.observeRestNotifications().map { it ?: true }
+
+    suspend fun setRestNotifications(enabled: Boolean) {
+        appMetaDao.upsert(currentMeta().copy(restNotifications = enabled))
+    }
+
+    /**
+     * 지금 저장된 설정 한 줄. `app_meta`는 통째로 덮어쓰는 REPLACE라 **읽어서 고쳐 쓰지 않으면
+     * 옆 칸이 기본값으로 되돌아간다**(휴식 길이를 바꿨더니 알림 설정이 켜지는 식).
+     */
+    private suspend fun currentMeta(): AppMeta = AppMeta(
+        seedVersion = seedVersion(),
+        restSeconds = restSeconds(),
+        restNotifications = appMetaDao.restNotifications() ?: true
+    )
 
     // ---------- 루틴 ----------
 
@@ -432,7 +451,7 @@ class Repository(private val db: AppDatabase) {
 
         // 시드 버전도 같이 넘어와야, 옛 백업을 불러왔을 때 다음 실행에서 밀린 시드가 채워진다.
         // 휴식 길이는 백업에 없다 — 기기에서 손에 익힌 값이지 기록이 아니라서 그대로 둔다.
-        appMetaDao.upsert(AppMeta(seedVersion = snapshot.seedVersion, restSeconds = restSeconds()))
+        appMetaDao.upsert(currentMeta().copy(seedVersion = snapshot.seedVersion))
     }
 
     /** 선택적 병합 결과. 뭐가 몇 개 들어왔는지 알려주려고 센다. */

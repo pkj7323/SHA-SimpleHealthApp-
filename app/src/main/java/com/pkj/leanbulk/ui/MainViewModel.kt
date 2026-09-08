@@ -101,6 +101,18 @@ class MainViewModel(
     private val _restTimer = MutableStateFlow<RestTimer?>(null)
     val restTimer: StateFlow<RestTimer?> = _restTimer
 
+    /** 휴식이 끝났을 때 알림을 띄울지. 설정 화면에서 끄고 켠다. */
+    val restNotifications: StateFlow<Boolean> = repository.observeRestNotifications()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    fun setRestNotifications(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.setRestNotifications(enabled)
+            // 꺼는 순간 이미 걸린 알람도 거둔다. 안 그러면 방금 끈 알림이 한 번 더 울린다.
+            if (!enabled) restAlarms.cancel()
+        }
+    }
+
     /** 다음 휴식의 길이(초). −/+로 고친 값이 여기 남아 다음 세트에 그대로 쓰인다. */
     private val _restSeconds = MutableStateFlow(com.pkj.leanbulk.data.DEFAULT_REST_SECONDS)
     val restSeconds: StateFlow<Int> = _restSeconds
@@ -446,7 +458,7 @@ class MainViewModel(
             endsAtEpochMs = endsAt,
             totalSec = seconds
         )
-        restAlarms.schedule(endsAt, exerciseName)
+        if (restNotifications.value) restAlarms.schedule(endsAt, exerciseName)
         ensureTicker()
     }
 
@@ -473,7 +485,7 @@ class MainViewModel(
             totalSec = maxOf(timer.totalSec, newRemaining)
         )
         // 알람도 같이 옮긴다. 안 그러면 화면은 1:50인데 30초 뒤에 울린다.
-        restAlarms.schedule(endsAt, timer.exerciseName)
+        if (restNotifications.value) restAlarms.schedule(endsAt, timer.exerciseName)
     }
 
     /** 휴식을 그만둔다. 다 쉬었든 안 쉬었든 화면에서 치우는 건 같은 일이다. */

@@ -358,6 +358,11 @@ internal val MIGRATION_16_17 = Migration(16, 17) { db ->
     )
 }
 
+/** 휴식 알림을 앱 안에서 끄고 켤 수 있게 한다. `app_meta`는 늘 한 줄이라 기본값이 곧 그 줄의 값이다. */
+internal val MIGRATION_17_18 = Migration(17, 18) { db ->
+    db.execSQL("ALTER TABLE `app_meta` ADD COLUMN `restNotifications` INTEGER NOT NULL DEFAULT 1")
+}
+
 @Database(
     entities = [
         MealEntry::class,
@@ -378,7 +383,7 @@ internal val MIGRATION_16_17 = Migration(16, 17) { db ->
         AppMeta::class,
         Exercise::class
     ],
-    version = 17,
+    version = 18,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -410,11 +415,11 @@ abstract class AppDatabase : RoomDatabase() {
         internal val MIGRATIONS = arrayOf(
             MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
             MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14,
-            MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17
+            MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18
         )
 
         /** 마이그레이션 테스트가 참조한다. `@Database`의 version과 항상 같아야 한다. */
-        internal const val VERSION = 17
+        internal const val VERSION = 18
 
         fun get(context: Context): AppDatabase =
             instance ?: synchronized(this) {

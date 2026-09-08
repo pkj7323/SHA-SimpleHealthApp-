@@ -420,6 +420,24 @@ class MigrationTest {
             }
     }
 
+    /** 설정 칸을 늘려도 이미 저장된 설정이 기본값으로 되돌아가면 안 된다. */
+    @Test
+    fun 알림_설정_칸이_생겨도_기존_설정은_그대로다() {
+        helper.createDatabase(TEST_DB, 17).use { db ->
+            db.execSQL("INSERT INTO app_meta (id, seedVersion, restSeconds) VALUES (1, 4, 180)")
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, AppDatabase.VERSION, true, *AppDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT seedVersion, restSeconds, restNotifications FROM app_meta").use { c ->
+                    assertTrue(c.moveToFirst())
+                    assertEquals(4, c.getInt(0))
+                    assertEquals("휴식 길이가 초기화됐다", 180, c.getInt(1))
+                    assertEquals("알림은 기본으로 켜져 있어야 한다", 1, c.getInt(2))
+                }
+            }
+    }
+
     @Test
     fun 선언한_버전과_실제_DB_버전이_같다() {
         val db = helper.createDatabase(TEST_DB, AppDatabase.VERSION)

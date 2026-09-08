@@ -22,8 +22,8 @@ android {
         applicationId = "com.pkj.leanbulk"
         minSdk = 26
         targetSdk = 37
-        versionCode = 5
-        versionName = "0.2.3"
+        versionCode = 6
+        versionName = "0.2.4"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -64,6 +64,8 @@ android {
 
     buildFeatures {
         compose = true
+        // 설정 화면이 버전 이름을 보여준다. 문자열로 따로 적어두면 버전을 올릴 때마다 어깋난다.
+        buildConfig = true
     }
 
     packaging {

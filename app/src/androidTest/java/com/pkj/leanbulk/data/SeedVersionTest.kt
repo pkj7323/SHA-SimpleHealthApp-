@@ -334,4 +334,28 @@ class SeedVersionTest {
 
         assertEquals("밀린 시드를 돌린 뒤 버전이 갱신돼야 한다", SeedData.VERSION, repo.seedVersion())
     }
+
+    /**
+     * 설정 한 칸을 고쳐도 옆 칸이 안 날아가야 한다.
+     *
+     * `app_meta`는 한 줄짜리 테이블을 통째로 덮어쓰는 REPLACE라, 읽어서 고쳐 쓰지 않으면
+     * 휴식 길이를 바꿨더니 알림 설정이 도로 켜지는 식이 된다. 시드를 다시 돌릴 때도 같다 —
+     * 시드 버전만 올려야 하는데 설정까지 초기화하면 안 된다.
+     */
+    @Test
+    fun 설정_한_칸을_고쳐도_나머지_설정은_남는다() = runBlocking {
+        repo.setRestSeconds(180)
+        repo.setRestNotifications(false)
+
+        assertEquals(180, repo.restSeconds())
+        assertFalse(repo.observeRestNotifications().first())
+
+        // 시드를 처음부터 다시 깔아도 설정은 사용자 것이다.
+        db.appMetaDao().upsert(AppMeta(seedVersion = 0, restSeconds = 180, restNotifications = false))
+        repo.applySeeds()
+
+        assertEquals("시드를 돌렸더니 휴식 길이가 초기화됐다", 180, repo.restSeconds())
+        assertFalse("시드를 돌렸더니 알림이 도로 켜졌다", repo.observeRestNotifications().first())
+        assertEquals(SeedData.VERSION, repo.seedVersion())
+    }
 }

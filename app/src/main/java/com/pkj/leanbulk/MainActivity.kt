@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -31,8 +32,12 @@ import androidx.compose.ui.platform.LocalContext
 import com.pkj.leanbulk.ui.BodyRecordScreen
 import com.pkj.leanbulk.ui.ExportScreen
 import com.pkj.leanbulk.ui.HistoryScreen
+import android.Manifest
+import androidx.activity.result.contract.ActivityResultContracts
 import com.pkj.leanbulk.notify.AndroidRestAlarms
 import com.pkj.leanbulk.ui.MainViewModel
+import com.pkj.leanbulk.ui.SettingsScreen
+import com.pkj.leanbulk.ui.hasNotificationPermission
 import com.pkj.leanbulk.ui.TodayDietScreen
 import com.pkj.leanbulk.ui.TodayWorkoutScreen
 import com.pkj.leanbulk.ui.ViewModelFactory
@@ -59,8 +64,21 @@ class MainActivity : ComponentActivity() {
         viewModel.flushPendingSaves()
     }
 
+    /**
+     * 알림 권한은 **앱을 처음 켤 때 한 번** 묻는다.
+     *
+     * 예전엔 운동을 시작할 때 물었는데, 그러면 운동을 막 시작하려는 순간에 시스템 대화상자가
+     * 끼어든다. 거절해도 앱은 그대로 돌아가고(진동은 울린다), 나중에 마음이 바뀌면 설정
+     * 탭에서 켤 수 있다.
+     */
+    private val askNotifications =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!hasNotificationPermission(this)) {
+            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         setContent {
             SimpleHealthTheme {
                 Surface {
@@ -71,7 +89,9 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class RootTab(val label: String) { TODAY("오늘"), HISTORY("히스토리"), EXPORT("내보내기") }
+private enum class RootTab(val label: String) {
+    TODAY("오늘"), HISTORY("히스토리"), EXPORT("내보내기"), SETTINGS("설정")
+}
 
 @Composable
 private fun RootScreen(vm: MainViewModel) {
@@ -109,6 +129,12 @@ private fun RootScreen(vm: MainViewModel) {
                     icon = { Icon(Icons.Filled.IosShare, contentDescription = null) },
                     label = { Text(RootTab.EXPORT.label) }
                 )
+                NavigationBarItem(
+                    selected = tab == RootTab.SETTINGS,
+                    onClick = { tab = RootTab.SETTINGS },
+                    icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                    label = { Text(RootTab.SETTINGS.label) }
+                )
             }
         }
     ) { padding ->
@@ -117,6 +143,7 @@ private fun RootScreen(vm: MainViewModel) {
                 RootTab.TODAY -> TodayScreen(vm, todaySubTab) { todaySubTab = it }
                 RootTab.HISTORY -> HistoryScreen(vm)
                 RootTab.EXPORT -> ExportScreen(vm)
+                RootTab.SETTINGS -> SettingsScreen(vm)
             }
         }
     }
