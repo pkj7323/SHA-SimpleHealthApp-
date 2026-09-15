@@ -120,6 +120,8 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
     val colors = ShaTheme.colors
     val type = ShaTheme.type
 
+    val showPlayer = date == today
+
     ShaScreen {
     // 헤더까지 전부 한 LazyColumn 안에 넣어야 위로 같이 스크롤된다.
     LazyColumn(
@@ -162,14 +164,6 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
                     onEnd = vm::endWorkout,
                     modifier = Modifier.padding(top = ShaSpacing.md)
                 )
-
-                // 오늘 탭에서는 늘 보인다. 시작 전 준비나 종료 뒤 스트레칭 때도 음악을 만진다.
-                // 지난 날짜 기록을 들춰볼 때만 숨긴다.
-                if (date == today) {
-                    ShaCard(Modifier.padding(top = ShaSpacing.md)) {
-                        MediaControlRow()
-                    }
-                }
 
                 // 편집이 루틴을 조용히 바꾸는 동작이라, 지금 그러는 중인지 화면에 적어둔다.
                 if (routineName.isNotBlank()) {
@@ -252,10 +246,22 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
             )
         }
 
-        // 휴식 창이 마지막 카드를 가리지 않도록 아래를 비워둔다.
-        item { Box(Modifier.padding(bottom = 96.dp)) }
+        // 휴식 창·음악 바가 마지막 카드를 가리지 않도록 아래를 비워둔다.
+        item { Box(Modifier.padding(bottom = if (showPlayer) 96.dp + MINI_PLAYER_CLEARANCE else 96.dp)) }
     }
 
+    // 음악 바는 목록과 따로 화면 아래에 떠 있다. 스크롤해도 늘 같은 자리다.
+    // 오늘 탭에서는 늘 보인다(시작 전 준비, 종료 뒤 스트레칭 때도 만진다). 지난 날짜에서만 숨긴다.
+    if (showPlayer) {
+        MiniPlayer(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = ShaSpacing.lg)
+                .padding(bottom = ShaSpacing.sm)
+        )
+    }
+
+    // 펼친 휴식 창은 음악 바 위를 덮는다(나중에 그려서). 접힌 버튼은 음악 바 위로 올린다.
     RestTimerOverlay(
         timer = restTimer,
         nowEpochMs = now,
@@ -263,7 +269,9 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
         onSkip = vm::skipRest,
         onExpandedChange = vm::setRestExpanded,
         expandedModifier = Modifier.align(Alignment.BottomCenter),
-        collapsedModifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+        collapsedModifier = Modifier
+            .align(Alignment.BottomEnd)
+            .padding(end = 16.dp, bottom = if (showPlayer) 16.dp + MINI_PLAYER_CLEARANCE else 16.dp)
     )
     }
 

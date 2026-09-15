@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -56,11 +58,13 @@ fun SettingsScreen(vm: MainViewModel) {
      * 돌아왔는데 여기가 "거부됨"으로 남아 있으면 사용자는 안 켜졌다고 여긴다.
      */
     var notificationsAllowed by remember { mutableStateOf(hasNotificationPermission(context)) }
+    var mediaAccess by remember { mutableStateOf(hasMediaAccess(context)) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 notificationsAllowed = hasNotificationPermission(context)
+                mediaAccess = hasMediaAccess(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -150,28 +154,42 @@ fun SettingsScreen(vm: MainViewModel) {
                     )
                 }
 
-                // 켜진 권한은 앱이 도로 뺏을 수 없다(안드로이드가 막는다). 상태만 보여주고
-                // 실제로 끄고 켜는 일은 시스템 설정에 맡긴다.
-                Column {
+                // 스위치를 켜 둬도 시스템 권한이 꺼져 있으면 안 뜬다. 그때만 여기서 알려준다.
+                if (!notificationsAllowed) {
                     Text(
-                        text = if (notificationsAllowed) "시스템 알림 권한: 허용됨" else "시스템 알림 권한: 꺼짐",
-                        style = type.body,
-                        color = if (notificationsAllowed) colors.ink else colors.danger
-                    )
-                    Text(
-                        text = if (notificationsAllowed) {
-                            "권한을 끄면 위 스위치가 켜져 있어도 알림이 안 뜹니다."
-                        } else {
-                            "이 상태에서는 알림이 안 뜹니다. 아래에서 켜 주세요."
-                        },
+                        "알림 권한이 꺼져 있어 지금은 알림이 안 뜹니다. 아래 권한에서 켜 주세요.",
                         style = type.caption,
-                        color = colors.muted
+                        color = colors.danger
                     )
                 }
-                ShaSecondaryButton(
-                    text = "시스템 알림 설정 열기",
-                    modifier = Modifier.fillMaxWidth().testTag("open_notification_settings"),
+            }
+        }
+
+        // 권한은 앱이 직접 켜고 끌 수 없다(안드로이드가 막는다). 상태만 보여주고, 누르면
+        // 시스템 설정으로 보낸다. 둘 다 이름에 "알림"이 붙어 헷갈리니 한 카드에 모아
+        // 각각 무엇에 쓰는지 적어 둔다.
+        ShaCard {
+            Column(verticalArrangement = Arrangement.spacedBy(ShaSpacing.xs)) {
+                Text(
+                    "권한",
+                    style = type.h2,
+                    color = colors.ink,
+                    modifier = Modifier.padding(bottom = ShaSpacing.xs)
+                )
+                PermissionRow(
+                    title = "알림 보내기",
+                    description = "휴식이 끝나면 알림창에 띄웁니다.",
+                    granted = notificationsAllowed,
+                    modifier = Modifier.testTag("open_notification_settings"),
                     onClick = { context.startActivity(appNotificationSettings(context.packageName)) }
+                )
+                // 안드로이드가 재생 정보를 "알림 접근"에 묶어 둬서 이름이 겁나 보인다. 무엇을 하는지 적어 둔다.
+                PermissionRow(
+                    title = "알림 접근",
+                    description = "운동 탭 음악 바에 곡 제목과 진행바를 띄웁니다. 재생 정보만 읽고 알림은 읽지 않습니다.",
+                    granted = mediaAccess,
+                    modifier = Modifier.testTag("open_media_access_settings"),
+                    onClick = { context.startActivity(mediaAccessSettingsIntent()) }
                 )
             }
         }
@@ -196,6 +214,37 @@ fun SettingsScreen(vm: MainViewModel) {
 
         Box(Modifier.padding(bottom = ShaSpacing.xxl))
     }
+    }
+}
+
+/** 권한 한 줄. 이름·쓰임새 · 켜짐/꺼짐 · 누르면 시스템 설정. */
+@Composable
+private fun PermissionRow(
+    title: String,
+    description: String,
+    granted: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val colors = ShaTheme.colors
+    val type = ShaTheme.type
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = ShaSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f).padding(end = ShaSpacing.md)) {
+            Text(title, style = type.body, color = colors.ink)
+            Text(description, style = type.caption, color = colors.muted)
+        }
+        Text(
+            if (granted) "켜짐" else "꺼짐",
+            style = type.bodyStrong,
+            color = if (granted) colors.primary else colors.muted
+        )
+        Icon(Icons.Filled.ChevronRight, contentDescription = "설정 열기", tint = colors.muted)
     }
 }
 
