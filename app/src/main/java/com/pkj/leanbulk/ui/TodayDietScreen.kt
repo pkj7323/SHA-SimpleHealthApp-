@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -114,7 +115,7 @@ fun TodayDietScreen(vm: MainViewModel) {
                     onAddFood = { foodPickerFor = index },
                     onOpenPresets = { presetPickerFor = index },
                     onRemoveFood = { foodIndex -> vm.removeFoodFromMeal(index, foodIndex) },
-                    onMoveFood = { from, to -> vm.moveFoodInMeal(index, from, to) },
+                    onChangeMultiplier = { foodIndex, delta -> vm.changeFoodMultiplier(index, foodIndex, delta) },
                     onEditMemo = { memoFor = index }
                 )
             }
@@ -161,7 +162,8 @@ fun TodayDietScreen(vm: MainViewModel) {
                 vm.addNewFood(name, category, macros, baseAmount, unit)
             },
             onDeleteFoods = vm::deleteFoods,
-            onDismiss = { foodPickerFor = null }
+            onDismiss = { foodPickerFor = null },
+            addedNames = draft.getOrNull(index)?.foods?.map { it.name }.orEmpty()
         )
     }
 
@@ -212,33 +214,31 @@ fun TodayDietScreen(vm: MainViewModel) {
 @Composable
 private fun TotalsRow(totals: DietTotals, target: DietTarget?) {
     val colors = ShaTheme.colors
-    Row(horizontalArrangement = Arrangement.spacedBy(ShaSpacing.md)) {
-        StatTile(
-            label = "칼로리",
-            value = (totals.entered.kcal ?: 0.0).roundToInt().toString(),
-            // 단위도 목표치도 안 붙인다. 칸이 좁아 "kcal"이 잘리고, 라벨이 이미 "칼로리"다.
-            unit = "",
-            delta = remainingText(totals.entered.kcal, target?.kcal),
-            deltaTone = toneFor(totals.entered.kcal, target?.kcal, colors.success, colors.muted),
-            modifier = Modifier.weight(1f)
+    val t = totals.entered
+    fun item(label: String, value: Double?, goal: Double?, unit: String, weight: Float = 1f) = StatItem(
+        label = label,
+        value = (value ?: 0.0).roundToInt().toString(),
+        unit = unit,
+        delta = remainingText(value, goal),
+        deltaTone = toneFor(value, goal, colors.success, colors.muted),
+        weight = weight
+    )
+    // 다섯 항목을 두 줄로. 칼로리가 가장 먼저 보는 숫자라 첫 줄에서 두 칸을 차지한다.
+    // 한 줄에 다섯을 넣으면 칸이 좁아 숫자가 읽기 힘들 만큼 작아진다.
+    StatGrid(
+        rows = listOf(
+            listOf(
+                // 단위도 목표치도 안 붙인다. 라벨이 이미 "칼로리"다.
+                item("칼로리", t.kcal, target?.kcal, "", weight = 2f),
+                item("단백질", t.protein, target?.protein, "g")
+            ),
+            listOf(
+                item("탄수", t.carbs, target?.carbs, "g"),
+                item("지방", t.fat, target?.fat, "g"),
+                item("당", t.sugar, target?.sugar, "g")
+            )
         )
-        StatTile(
-            label = "단백질",
-            value = (totals.entered.protein ?: 0.0).roundToInt().toString(),
-            unit = "g",
-            delta = remainingText(totals.entered.protein, target?.protein),
-            deltaTone = toneFor(totals.entered.protein, target?.protein, colors.success, colors.muted),
-            modifier = Modifier.weight(1f)
-        )
-        StatTile(
-            label = "탄수",
-            value = (totals.entered.carbs ?: 0.0).roundToInt().toString(),
-            unit = "g",
-            delta = remainingText(totals.entered.carbs, target?.carbs),
-            deltaTone = toneFor(totals.entered.carbs, target?.carbs, colors.success, colors.muted),
-            modifier = Modifier.weight(1f)
-        )
-    }
+    )
 
     if (totals.unknownCount > 0) {
         Text(
@@ -273,7 +273,7 @@ private fun MealCard(
     onAddFood: () -> Unit,
     onOpenPresets: () -> Unit,
     onRemoveFood: (Int) -> Unit,
-    onMoveFood: (Int, Int) -> Unit,
+    onChangeMultiplier: (Int, Double) -> Unit,
     onEditMemo: () -> Unit
 ) {
     val colors = ShaTheme.colors
@@ -337,17 +337,22 @@ private fun MealCard(
                         style = type.dataSmall,
                         color = colors.bodyText
                     )
-                    // 종목 순서 조정과 같은 이유 — 담는 순서가 늘 마지막이라 끌어올릴 수단이 필요하다.
+                    // 순서 조정 대신 배수. 끼니 안 음식 순서는 결과에 아무 영향이 없지만,
+                    // "밥 반 공기 더"는 담은 뒤에 가장 자주 고치는 것이다.
                     IconButton(
-                        onClick = { onMoveFood(index, index - 1) },
-                        enabled = index > 0,
+                        onClick = { onChangeMultiplier(index, -0.5) },
+                        enabled = food.multiplier > 0.5,
                         modifier = Modifier.size(32.dp)
-                    ) { Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "위로", tint = colors.muted) }
+                    ) {
+                        Icon(
+                            Icons.Filled.Remove, contentDescription = "배수 줄이기",
+                            tint = if (food.multiplier > 0.5) colors.muted else colors.border
+                        )
+                    }
                     IconButton(
-                        onClick = { onMoveFood(index, index + 1) },
-                        enabled = index < meal.foods.lastIndex,
+                        onClick = { onChangeMultiplier(index, 0.5) },
                         modifier = Modifier.size(32.dp)
-                    ) { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "아래로", tint = colors.muted) }
+                    ) { Icon(Icons.Filled.Add, contentDescription = "배수 늘리기", tint = colors.muted) }
                     IconButton(onClick = { onRemoveFood(index) }, modifier = Modifier.size(32.dp)) {
                         Icon(Icons.Filled.Delete, contentDescription = "음식 삭제", tint = colors.muted)
                     }
@@ -397,9 +402,11 @@ private fun MealCard(
     }
 }
 
-private fun quantityLine(food: DraftMealFood): String =
-    food.amount?.let { "" + it.roundToInt() + food.amountUnit.label }
-        ?: ("×" + formatNumber(food.multiplier))
+/** "200g · ×2". 그램을 알아도 배수를 같이 적는다 — 옆의 −/+가 움직이는 게 배수이기 때문이다. */
+private fun quantityLine(food: DraftMealFood): String {
+    val times = "×" + formatNumber(food.multiplier)
+    return food.amount?.let { "" + it.roundToInt() + food.amountUnit.label + " · " + times } ?: times
+}
 
 private fun formatNumber(value: Double): String =
     if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString()

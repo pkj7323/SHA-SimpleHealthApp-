@@ -3,11 +3,13 @@ package com.pkj.leanbulk.ui
 import android.app.DatePickerDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.window.Dialog
@@ -32,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -40,7 +43,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -97,21 +102,24 @@ fun StatTile(
     unit: String,
     delta: String?,
     deltaTone: Color? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** 값 글자 배율. [StatGrid]가 모든 타일에 **같은 값**을 줘서 숫자 크기가 서로 맞게 한다. */
+    valueScale: Float = 1f
 ) {
     val colors = ShaTheme.colors
     val type = ShaTheme.type
+    val valueStyle = type.display.copy(fontSize = type.display.fontSize * valueScale)
     Column(
         modifier
             .background(colors.surfaceRaised, RoundedCornerShape(16.dp))
-            .padding(horizontal = ShaSpacing.lg, vertical = ShaSpacing.lg)
+            .padding(horizontal = STAT_TILE_PADDING, vertical = ShaSpacing.lg)
     ) {
-        Text(label, style = type.caption, color = colors.muted)
+        Text(label, style = type.caption, color = colors.muted, maxLines = 1)
         Row(
             Modifier.padding(top = ShaSpacing.sm),
             verticalAlignment = Alignment.Bottom
         ) {
-            Text(value, style = type.display, color = colors.ink)
+            Text(value, style = valueStyle, color = colors.ink, maxLines = 1, softWrap = false)
             if (unit.isNotBlank()) {
                 Text(
                     unit,
@@ -131,6 +139,74 @@ fun StatTile(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = ShaSpacing.xs)
         )
+    }
+}
+
+/** 타일 안쪽 좌우 여백. [StatGrid]가 글자 들어갈 폭을 셀 때 같은 값을 쓴다. */
+private val STAT_TILE_PADDING = 14.dp
+
+/** 격자 한 칸. [weight]는 같은 줄 안에서의 너비 비율이다. */
+data class StatItem(
+    val label: String,
+    val value: String,
+    val unit: String,
+    val delta: String?,
+    val deltaTone: Color? = null,
+    val weight: Float = 1f
+)
+
+/**
+ * 숫자 타일 격자. **모든 값이 한 줄에 들어가도록 글자를 같은 비율로 줄인다.**
+ *
+ * 타일마다 따로 줄이면(자기 칸에 맞춰) "2550"만 작아지고 "24"는 그대로라 숫자끼리
+ * 크기가 달라져서 비교가 안 된다. 그렇다고 안 줄이면 네 자리에서 마지막 숫자가 다음 줄로
+ * 떨어진다. 그래서 **가장 빠듯한 칸 기준으로 배율 하나를 정해 전부에 똑같이** 쓴다.
+ */
+@Composable
+fun StatGrid(rows: List<List<StatItem>>, modifier: Modifier = Modifier) {
+    val measurer = rememberTextMeasurer()
+    val type = ShaTheme.type
+    val density = LocalDensity.current
+    val gap = ShaSpacing.md
+
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val full = maxWidth
+        val scale = remember(rows, full) {
+            var worst = 1f
+            rows.forEach { row ->
+                val weights = row.sumOf { it.weight.toDouble() }.toFloat()
+                val usable = full - gap * (row.size - 1)
+                row.forEach { item ->
+                    val inner = usable * (item.weight / weights) - STAT_TILE_PADDING * 2
+                    val valuePx = measurer.measure(AnnotatedString(item.value), type.display).size.width
+                    val unitPx = if (item.unit.isBlank()) 0 else
+                        measurer.measure(AnnotatedString(item.unit), type.caption).size.width +
+                            with(density) { 2.dp.roundToPx() }
+                    val need = valuePx + unitPx
+                    val have = with(density) { inner.toPx() }
+                    if (need > have && need > 0) worst = minOf(worst, have / need)
+                }
+            }
+            worst
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+            rows.forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    row.forEach { item ->
+                        StatTile(
+                            label = item.label,
+                            value = item.value,
+                            unit = item.unit,
+                            delta = item.delta,
+                            deltaTone = item.deltaTone,
+                            valueScale = scale,
+                            modifier = Modifier.weight(item.weight)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

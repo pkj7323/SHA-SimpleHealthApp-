@@ -500,6 +500,15 @@ class MainViewModel(
         if (restNotifications.value) restAlarms.schedule(endsAt, timer.exerciseName)
     }
 
+    /**
+     * 설정에서 휴식 기본 길이를 바꾼다. 도는 중인 타이머는 건드리지 않는다 —
+     * 지금 쉬는 중에 설정을 고쳤다고 남은 시간이 튀면 안 된다. 다음 세트부터 적용된다.
+     */
+    fun setDefaultRestSeconds(seconds: Int) {
+        _restSeconds.value = seconds.coerceIn(REST_STEP_SEC, MAX_REST_SEC)
+        viewModelScope.launch { repository.setRestSeconds(_restSeconds.value) }
+    }
+
     /** 휴식을 그만둔다. 다 쉬었든 안 쉬었든 화면에서 치우는 건 같은 일이다. */
     fun skipRest() {
         _restTimer.value = null
@@ -654,10 +663,21 @@ class MainViewModel(
     }
 
     /** 음식 줄 순서를 옮긴다. 운동 종목 순서 조정과 같은 이유 — 담는 순서는 늘 맨 아래다. */
-    fun moveFoodInMeal(mealIndex: Int, from: Int, to: Int) {
+    fun changeFoodMultiplier(mealIndex: Int, foodIndex: Int, delta: Double) {
         updateMeal(mealIndex) { meal ->
-            if (from !in meal.foods.indices || to !in meal.foods.indices || from == to) meal
-            else meal.copy(foods = meal.foods.toMutableList().apply { add(to, removeAt(from)) }).recomputeFromFoods()
+            val food = meal.foods.getOrNull(foodIndex) ?: return@updateMeal meal
+            // 0.5 밑으로는 안 내린다. 0배는 "안 먹었다"라 지우기로 할 일이다.
+            val next = (food.multiplier + delta).coerceAtLeast(0.5)
+            if (next == food.multiplier) return@updateMeal meal
+            // 배수 비율로 다시 곱한다. 카탈로그를 다시 읽지 않는 이유는 담을 때의 값이
+            // 기록이기 때문이다 — 그 뒤 카탈로그를 고쳤다고 이미 담은 줄이 바뀌면 안 된다.
+            val ratio = next / food.multiplier
+            val scaled = food.copy(
+                multiplier = next,
+                amount = food.amount?.times(ratio),
+                macros = food.macros.scaledBy(ratio)
+            )
+            meal.copy(foods = meal.foods.toMutableList().apply { set(foodIndex, scaled) }).recomputeFromFoods()
         }
     }
 

@@ -163,6 +163,13 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
                     modifier = Modifier.padding(top = ShaSpacing.md)
                 )
 
+                // 운동 중에만 보인다. 쉬는 날 기록을 들춰볼 때까지 음악 버튼이 떠 있을 이유가 없다.
+                if (session?.running == true && date == today) {
+                    ShaCard(Modifier.padding(top = ShaSpacing.md)) {
+                        MediaControlRow()
+                    }
+                }
+
                 // 편집이 루틴을 조용히 바꾸는 동작이라, 지금 그러는 중인지 화면에 적어둔다.
                 if (routineName.isNotBlank()) {
                     Row(

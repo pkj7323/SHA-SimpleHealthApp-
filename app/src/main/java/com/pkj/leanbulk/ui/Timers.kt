@@ -3,6 +3,9 @@ package com.pkj.leanbulk.ui
 /** −/+ 한 번에 움직이는 폭. 10초면 한두 번 눌러 맞추기 좋고, 잘못 눌러도 크게 어긋나지 않는다. */
 const val REST_STEP_SEC = 10
 
+/** 설정에서 고를 수 있는 가장 긴 휴식. 10분 넘게 쉬는 건 휴식이 아니라 운동을 멈춘 것이다. */
+const val MAX_REST_SEC = 600
+
 /**
  * 세트를 끝내고 도는 휴식 타이머.
  *

@@ -14,7 +14,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -43,6 +48,7 @@ import androidx.compose.runtime.DisposableEffect
 fun SettingsScreen(vm: MainViewModel) {
     val context = LocalContext.current
     val restNotifications by vm.restNotifications.collectAsState()
+    val restSeconds by vm.restSeconds.collectAsState()
     val themeMode by vm.themeMode.collectAsState()
 
     /**
@@ -97,7 +103,35 @@ fun SettingsScreen(vm: MainViewModel) {
 
         ShaCard {
             Column(verticalArrangement = Arrangement.spacedBy(ShaSpacing.md)) {
-                Text("휴식 알림", style = type.h2, color = colors.ink)
+                Text("휴식 타이머", style = type.h2, color = colors.ink)
+
+                // 기본 길이. 운동 중 휴식 창에서 −/+로 고쳐도 여기 값이 같이 바뀐다(같은 값이다).
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f).padding(end = ShaSpacing.md)) {
+                        Text("기본 휴식 시간", style = type.body, color = colors.ink)
+                        Text(
+                            "세트를 끝내면 이만큼 셉니다. 운동 중에 고쳐도 여기에 남습니다.",
+                            style = type.caption,
+                            color = colors.muted
+                        )
+                    }
+                    IconButton(
+                        onClick = { vm.setDefaultRestSeconds(restSeconds - REST_STEP_SEC) },
+                        enabled = restSeconds > REST_STEP_SEC,
+                        modifier = Modifier.testTag("rest_default_minus")
+                    ) { Icon(Icons.Filled.Remove, contentDescription = "기본 휴식 줄이기", tint = colors.muted) }
+                    Text(
+                        formatClock(restSeconds.toLong()),
+                        style = type.data,
+                        color = colors.ink,
+                        modifier = Modifier.testTag("rest_default_value")
+                    )
+                    IconButton(
+                        onClick = { vm.setDefaultRestSeconds(restSeconds + REST_STEP_SEC) },
+                        enabled = restSeconds < MAX_REST_SEC,
+                        modifier = Modifier.testTag("rest_default_plus")
+                    ) { Icon(Icons.Filled.Add, contentDescription = "기본 휴식 늘리기", tint = colors.muted) }
+                }
 
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     // 스위치와 붙여놓으면 줄바꿈된 설명이 스위치 아래로 기어들어간다.

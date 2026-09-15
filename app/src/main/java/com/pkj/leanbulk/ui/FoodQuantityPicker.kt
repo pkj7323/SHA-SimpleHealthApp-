@@ -76,7 +76,9 @@ fun FoodQuantityPickerDialog(
         name: String, category: String, macros: Macros, baseAmount: Double?, unit: AmountUnit
     ) -> FoodItem,
     onDeleteFoods: (List<Long>) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /** 이 끼니에 이미 담긴 음식 이름. 창을 연 채로 여러 개 담을 때 뭘 담았는지 보이게 한다. */
+    addedNames: List<String> = emptyList()
 ) {
     var selected by remember { mutableStateOf<FoodItem?>(null) }
     var tab by remember { mutableStateOf(FoodPickerTab.SEARCH) }
@@ -84,71 +86,90 @@ fun FoodQuantityPickerDialog(
     var editing by remember { mutableStateOf<FoodItem?>(null) }
     val scope = rememberCoroutineScope()
 
-    editing?.let { food ->
-        FoodFormDialog(
-            title = "음식 수정",
-            confirmText = "저장",
-            initial = food,
-            onConfirm = { name, category, macros, baseAmount, unit ->
-                onEditFood(
-                    food.copy(
-                        name = name,
-                        category = category,
-                        macros = macros,
-                        baseAmount = baseAmount,
-                        baseAmountUnit = unit
-                    )
-                )
-                editing = null
-            },
-            onDismiss = { editing = null }
-        )
-        return
+    // 수량·등록·수정도 **같은 창 안에서 단계만 바꾼다.** 단계마다 다른 Dialog를 띄우면
+    // 창이 닫혔다 다시 열리면서 매번 아래로 내려갔다 올라오는 애니메이션이 났다.
+    val formState = remember(editing?.id, showDirectRegister) {
+        if (editing != null || showDirectRegister) FoodFormState(editing) else null
+    }
+    var multiplier by remember(selected?.id) { mutableStateOf(1.0) }
+    val mode = when {
+        formState != null -> PickerMode.FORM
+        selected != null -> PickerMode.QUANTITY
+        else -> PickerMode.LIST
     }
 
-    selected?.let { food ->
-        FoodQuantityDialog(
-            food = food,
-            onConfirm = { multiplier ->
-                onConfirm(food, multiplier)
-                selected = null // 검색 목록으로 돌아가 다른 음식을 이어 담을 수 있게 한다.
-            },
-            onDismiss = { selected = null }
-        )
-        return
-    }
-
-    if (showDirectRegister) {
-        FoodFormDialog(
-            title = "음식 직접 등록",
-            confirmText = "등록",
-            initial = null,
-            onConfirm = { name, category, macros, baseAmount, unit ->
-                scope.launch {
-                    val created = onAddNewFood(name, category, macros, baseAmount, unit)
-                    showDirectRegister = false
-                    selected = created // 등록하자마자 수량을 정해 바로 담을 수 있게 이어준다.
-                }
-            },
-            onDismiss = { showDirectRegister = false }
-        )
-        return
+    fun backToList() {
+        selected = null
+        editing = null
+        showDirectRegister = false
     }
 
     ShaDialog(
-        title = "음식 추가",
-        onDismiss = onDismiss,
-        dismissText = "닫기",
-        // 목록 위에 떠 있으면 음식 한 줄처럼 보인다. 늘 손 닿는 아래에 둔다(종목 추가 창과 같다).
-        confirmText = "직접 등록",
-        onConfirm = { showDirectRegister = true }
+        title = when (mode) {
+            PickerMode.FORM -> if (editing != null) "음식 수정" else "음식 직접 등록"
+            PickerMode.QUANTITY -> selected?.name.orEmpty()
+            PickerMode.LIST -> "음식 추가"
+        },
+        // 목록이 아닌 단계에서 닫으면 창을 끄지 않고 목록으로 돌아간다 — 한 끼니에 여러 개를
+        // 담는 중이라, 수량에서 한 번 취소했다고 처음부터 다시 열게 하면 안 된다.
+        onDismiss = { if (mode == PickerMode.LIST) onDismiss() else backToList() },
+        dismissText = if (mode == PickerMode.LIST) "닫기" else "취소",
+        confirmText = when (mode) {
+            PickerMode.FORM -> if (editing != null) "저장" else "등록"
+            PickerMode.QUANTITY -> "추가"
+            // 목록 위에 떠 있으면 음식 한 줄처럼 보인다. 늘 손 닿는 아래에 둔다(종목 추가 창과 같다).
+            PickerMode.LIST -> "직접 등록"
+        },
+        confirmEnabled = formState?.name?.isNotBlank() ?: true,
+        onConfirm = {
+            when (mode) {
+                PickerMode.FORM -> {
+                    val form = formState ?: return@ShaDialog
+                    val target = editing
+                    if (target != null) {
+                        onEditFood(form.applyTo(target))
+                        editing = null
+                    } else {
+                        scope.launch {
+                            val created = onAddNewFood(
+                                form.name.trim(), form.categoryOrDefault, form.macros,
+                                form.baseAmount, form.unit
+                            )
+                            showDirectRegister = false
+                            selected = created // 등록하자마자 수량을 정해 바로 담을 수 있게 이어준다.
+                        }
+                    }
+                }
+                PickerMode.QUANTITY -> {
+                    selected?.let { onConfirm(it, multiplier) }
+                    selected = null // 목록으로 돌아가 다른 음식을 이어 담을 수 있게 한다.
+                }
+                PickerMode.LIST -> showDirectRegister = true
+            }
+        }
     ) {
+        when (mode) {
+            PickerMode.FORM -> formState?.let { FoodFormContent(it) }
+            PickerMode.QUANTITY -> selected?.let {
+                FoodQuantityContent(it, multiplier) { value -> multiplier = value }
+            }
+            PickerMode.LIST -> {
                 SubTabBar(
                     tabs = FoodPickerTab.entries.map { it.label },
                     selected = tab.ordinal,
                     onSelect = { tab = FoodPickerTab.entries[it] },
                     modifier = Modifier.testTag("food_tab_bar")
                 )
+                if (addedNames.isNotEmpty()) {
+                    Text(
+                        "이 끼니에 담음 · " + addedNames.joinToString(", "),
+                        style = ShaTheme.type.caption,
+                        color = ShaTheme.colors.primary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(bottom = ShaSpacing.sm).testTag("food_added_names")
+                    )
+                }
                 when (tab) {
                     FoodPickerTab.SEARCH -> SearchFoodTab(
                         foods = foods,
@@ -165,8 +186,13 @@ fun FoodQuantityPickerDialog(
                         onEdit = { editing = it }
                     )
                 }
+            }
+        }
     }
 }
+
+/** 음식 추가 창이 지금 보여주는 단계. */
+private enum class PickerMode { LIST, QUANTITY, FORM }
 
 @Composable
 private fun SearchFoodTab(
@@ -471,8 +497,6 @@ fun FoodQuantityDialog(
     onDismiss: () -> Unit
 ) {
     var multiplier by remember { mutableStateOf(initialMultiplier) }
-    val macros = remember(multiplier) { food.macros.scaledBy(multiplier) }
-    val amount = remember(multiplier) { food.baseAmount?.times(multiplier) }
 
     ShaDialog(
         title = food.name,
@@ -480,12 +504,26 @@ fun FoodQuantityDialog(
         confirmText = "추가",
         onConfirm = { onConfirm(multiplier) }
     ) {
+        FoodQuantityContent(food, multiplier) { multiplier = it }
+    }
+}
+
+/** 수량 단계의 내용. 음식 추가 창 안에서도, 따로 떠 있는 수량 창에서도 같은 것을 쓴다. */
+@Composable
+private fun FoodQuantityContent(
+    food: FoodItem,
+    multiplier: Double,
+    onMultiplierChange: (Double) -> Unit
+) {
+    val macros = remember(food.id, multiplier) { food.macros.scaledBy(multiplier) }
+    val amount = remember(food.id, multiplier) { food.baseAmount?.times(multiplier) }
+    Column {
         NumberStepper(
             description = "배수",
             value = multiplier,
             step = 0.5,
             modifier = Modifier.fillMaxWidth()
-        ) { multiplier = it.coerceAtLeast(0.5) }
+        ) { onMultiplierChange(it.coerceAtLeast(0.5)) }
 
         // 담을 양이 이 창의 결론이므로 값 단계로 크게 적는다.
         amount?.let {
@@ -506,73 +544,68 @@ fun FoodQuantityDialog(
 }
 
 /**
- * 음식 하나를 적는 폼. **직접 등록과 수정이 같은 화면을 쓴다** — 적는 항목이 똑같은데
+ * 음식 하나를 적는 폼의 상태. **직접 등록과 수정이 같은 것을 쓴다** — 적는 항목이 똑같은데
  * 화면을 둘로 두면 한쪽만 고치는 실수가 난다. [initial]이 있으면 그 값으로 채우고 수정이 된다.
+ *
+ * 상태를 바깥(음식 추가 창)이 들고 있어야 확인 버튼이 폼 값을 읽을 수 있다 — 버튼은
+ * 창 껍데기에 있고 폼은 창 안쪽에 있기 때문이다.
  */
-@Composable
-private fun FoodFormDialog(
-    title: String,
-    confirmText: String,
-    initial: FoodItem?,
-    onConfirm: (name: String, category: String, macros: Macros, baseAmount: Double?, unit: AmountUnit) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var name by remember { mutableStateOf(initial?.name ?: "") }
+private class FoodFormState(initial: FoodItem?) {
+    var name by mutableStateOf(initial?.name ?: "")
     // 비워두면 "기타"로 저장한다. 미리 채워두면 지우고 쓰는 사람이 매번 지워야 한다.
-    var category by remember { mutableStateOf(initial?.category ?: "") }
-    var kcal by remember { mutableStateOf(initial?.macros?.kcal) }
-    var protein by remember { mutableStateOf(initial?.macros?.protein) }
-    var carbs by remember { mutableStateOf(initial?.macros?.carbs) }
-    var fat by remember { mutableStateOf(initial?.macros?.fat) }
-    var sugar by remember { mutableStateOf(initial?.macros?.sugar) }
-    var baseAmount by remember { mutableStateOf(initial?.baseAmount) }
-    var unit by remember { mutableStateOf(initial?.baseAmountUnit ?: AmountUnit.G) }
+    var category by mutableStateOf(initial?.category ?: "")
+    var kcal by mutableStateOf(initial?.macros?.kcal)
+    var protein by mutableStateOf(initial?.macros?.protein)
+    var carbs by mutableStateOf(initial?.macros?.carbs)
+    var fat by mutableStateOf(initial?.macros?.fat)
+    var sugar by mutableStateOf(initial?.macros?.sugar)
+    var baseAmount by mutableStateOf(initial?.baseAmount)
+    var unit by mutableStateOf(initial?.baseAmountUnit ?: AmountUnit.G)
 
-    ShaDialog(
-        title = title,
-        onDismiss = onDismiss,
-        confirmText = confirmText,
-        confirmEnabled = name.isNotBlank(),
-        onConfirm = {
-            onConfirm(
-                name.trim(),
-                category.ifBlank { "기타" },
-                Macros(kcal, protein, carbs, fat, sugar),
-                baseAmount,
-                unit
-            )
-        }
-    ) {
+    val categoryOrDefault: String get() = category.ifBlank { "기타" }
+    val macros: Macros get() = Macros(kcal, protein, carbs, fat, sugar)
+
+    fun applyTo(food: FoodItem): FoodItem = food.copy(
+        name = name.trim(),
+        category = categoryOrDefault,
+        macros = macros,
+        baseAmount = baseAmount,
+        baseAmountUnit = unit
+    )
+}
+
+@Composable
+private fun FoodFormContent(form: FoodFormState) {
         Column(
             Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(ShaSpacing.md)
         ) {
                 ShaTextField(
                     label = "음식 이름",
-                    value = name,
-                    onValueChange = { name = it },
+                    value = form.name,
+                    onValueChange = { form.name = it },
                     fieldModifier = Modifier.testTag("direct_register_name")
                 )
                 ShaTextField(
                     label = "분류",
-                    value = category,
-                    onValueChange = { category = it },
+                    value = form.category,
+                    onValueChange = { form.category = it },
                     placeholder = "기타"
                 )
                 Row(
                     Modifier.fillMaxWidth().padding(top = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    NullableNumberField("칼로리", kcal) { kcal = it }
-                    NullableNumberField("단백질", protein) { protein = it }
+                    NullableNumberField("칼로리", form.kcal) { form.kcal = it }
+                    NullableNumberField("단백질", form.protein) { form.protein = it }
                 }
                 Row(
                     Modifier.fillMaxWidth().padding(top = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    NullableNumberField("탄수", carbs) { carbs = it }
-                    NullableNumberField("지방", fat) { fat = it }
-                    NullableNumberField("당", sugar) { sugar = it }
+                    NullableNumberField("탄수", form.carbs) { form.carbs = it }
+                    NullableNumberField("지방", form.fat) { form.fat = it }
+                    NullableNumberField("당", form.sugar) { form.sugar = it }
                 }
                 Row(
                     Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -581,14 +614,14 @@ private fun FoodFormDialog(
                 ) {
                     NullableNumberField(
                         label = "기준량",
-                        value = baseAmount,
+                        value = form.baseAmount,
                         modifier = Modifier.weight(1f),
-                        onValueChange = { baseAmount = it }
+                        onValueChange = { form.baseAmount = it }
                     )
                     AmountUnit.entries.forEach { u ->
                         FilterChip(
-                            selected = unit == u,
-                            onClick = { unit = u },
+                            selected = form.unit == u,
+                            onClick = { form.unit = u },
                             label = { Text(u.label) },
                             modifier = Modifier.testTag("unit_${u.name}")
                         )
@@ -600,7 +633,6 @@ private fun FoodFormDialog(
                     color = ShaTheme.colors.muted
                 )
         }
-    }
 }
 
 /** 모르는 값은 0이 아니라 `?`로 적는다 — 0kcal이라고 적어두면 사실이 아닌 값이 기록으로 남는다. */

@@ -50,6 +50,10 @@ fun BodyRecordScreen(vm: MainViewModel) {
     val records by vm.bodyRecords.collectAsState()
 
     var editing by remember { mutableStateOf<BodyRecord?>(null) }
+    // 식단·운동처럼 날짜를 옮겨 다닌다. 그날 기록이 있으면 폼이 그 값으로 채워진다.
+    var date by rememberSaveable { mutableStateOf(today) }
+    // 날짜 하나에 기록 하나다(`body_record.date`가 유니크). 그날 것이 있으면 그걸 고친다.
+    val onDate = records.firstOrNull { it.date == date }
     // 탭을 옮겼다 와도 보던 방식이 유지되게 rememberSaveable로 둔다.
     var asChart by rememberSaveable { mutableStateOf(false) }
     val colors = ShaTheme.colors
@@ -61,11 +65,10 @@ fun BodyRecordScreen(vm: MainViewModel) {
             verticalArrangement = Arrangement.spacedBy(ShaSpacing.md)
         ) {
             item {
-                Text(
-                    "신체",
-                    style = type.h1,
-                    color = colors.ink,
-                    modifier = Modifier.padding(top = ShaSpacing.lg, bottom = ShaSpacing.md)
+                ShaDateHeader(
+                    date = date,
+                    subtitle = if (onDate != null) "이날 기록 있음" else "이날 기록 없음",
+                    onDateChange = { date = it; editing = null }
                 )
             }
 
@@ -76,10 +79,11 @@ fun BodyRecordScreen(vm: MainViewModel) {
 
             item {
                 BodyRecordForm(
-                    initial = editing,
-                    today = today,
+                    // 목록에서 "수정"을 누른 기록이 먼저, 아니면 고른 날짜의 기록.
+                    initial = editing ?: onDate,
+                    date = date,
                     onSave = { vm.saveBodyRecord(it); editing = null },
-                    onCancelEdit = { editing = null }
+                    onCancelEdit = { editing = null; date = today }
                 )
             }
 
@@ -126,7 +130,8 @@ fun BodyRecordScreen(vm: MainViewModel) {
                 items(records, key = { it.id }) { record ->
                     RecordCard(
                         record = record,
-                        onEdit = { editing = record },
+                        // 수정은 그 기록의 날짜로 옮겨 가는 것과 같다. 헤더 날짜도 같이 맞춘다.
+                        onEdit = { editing = record; date = record.date },
                         onDelete = { vm.deleteBodyRecord(record.id) }
                     )
                 }
@@ -313,22 +318,21 @@ private fun shortDate(iso: String): String {
 @Composable
 private fun BodyRecordForm(
     initial: BodyRecord?,
-    today: String,
+    date: String,
     onSave: (BodyRecord) -> Unit,
     onCancelEdit: () -> Unit
 ) {
-    // initial이 바뀌면(= 수정 버튼을 누르면) 입력칸을 그 기록 값으로 다시 채운다.
-    var date by remember(initial) { mutableStateOf(initial?.date ?: today) }
-    var weight by remember(initial) { mutableStateOf(initial?.weightKg) }
-    var muscle by remember(initial) { mutableStateOf(initial?.muscleMassKg) }
-    var fatMass by remember(initial) { mutableStateOf(initial?.fatMassKg) }
-    var fatPercent by remember(initial) { mutableStateOf(initial?.fatPercent) }
-    var waist by remember(initial) { mutableStateOf(initial?.waistCm) }
-    var tool by remember(initial) { mutableStateOf(initial?.tool ?: "") }
-    var memo by remember(initial) { mutableStateOf(initial?.memo ?: "") }
+    // 날짜나 고칠 기록이 바뀌면 입력칸을 그 값으로 다시 채운다.
+    var weight by remember(initial, date) { mutableStateOf(initial?.weightKg) }
+    var muscle by remember(initial, date) { mutableStateOf(initial?.muscleMassKg) }
+    var fatMass by remember(initial, date) { mutableStateOf(initial?.fatMassKg) }
+    var fatPercent by remember(initial, date) { mutableStateOf(initial?.fatPercent) }
+    var waist by remember(initial, date) { mutableStateOf(initial?.waistCm) }
+    var tool by remember(initial, date) { mutableStateOf(initial?.tool ?: "") }
+    var memo by remember(initial, date) { mutableStateOf(initial?.memo ?: "") }
 
     // 체지방량/체지방률 중 방금 직접 입력한 쪽을 "기준"으로 삼아 나머지 하나를 실시간으로 채운다.
-    var fatDrivenBy by remember(initial) {
+    var fatDrivenBy by remember(initial, date) {
         mutableStateOf<FatField?>(
             when {
                 initial?.fatPercent != null -> FatField.PERCENT
@@ -372,26 +376,12 @@ private fun BodyRecordForm(
         Column {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    if (initial == null) "새 기록" else "기록 수정",
+                    if (initial == null) "새 기록" else "이날 기록 수정",
                     style = type.h2,
                     color = colors.ink,
                     modifier = Modifier.weight(1f)
                 )
-                Text(
-                    date,
-                    style = type.bodyStrong,
-                    color = colors.primary,
-                    modifier = Modifier
-                        .clickable {
-                            val current = LocalDate.parse(date)
-                            DatePickerDialog(
-                                context,
-                                { _, y, m, d -> date = LocalDate.of(y, m + 1, d).toString() },
-                                current.year, current.monthValue - 1, current.dayOfMonth
-                            ).show()
-                        }
-                        .padding(ShaSpacing.sm)
-                )
+
             }
 
             Text(
