@@ -163,8 +163,9 @@ fun TodayWorkoutScreen(vm: MainViewModel) {
                     modifier = Modifier.padding(top = ShaSpacing.md)
                 )
 
-                // 운동 중에만 보인다. 쉬는 날 기록을 들춰볼 때까지 음악 버튼이 떠 있을 이유가 없다.
-                if (session?.running == true && date == today) {
+                // 오늘 탭에서는 늘 보인다. 시작 전 준비나 종료 뒤 스트레칭 때도 음악을 만진다.
+                // 지난 날짜 기록을 들춰볼 때만 숨긴다.
+                if (date == today) {
                     ShaCard(Modifier.padding(top = ShaSpacing.md)) {
                         MediaControlRow()
                     }
