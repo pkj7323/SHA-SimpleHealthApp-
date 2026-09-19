@@ -26,10 +26,15 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.SimpleHealth">
 
+        <!--
+          세로 고정. 가로로 돌리면 화면 세로가 절반이 되는데, 아래에 띄운 음악 바와 휴식 창이
+          내용을 덮어 버린다. 기록하고 타이머 보는 앱이라 가로로 쓸 일도 없다.
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
+            android:screenOrientation="portrait"
             android:theme="@style/Theme.SimpleHealth">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

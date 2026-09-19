@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -130,12 +132,14 @@ fun StatTile(
                 )
             }
         }
-        // 한 줄로 못 박는다. 한 타일만 두 줄이 되면 세 타일의 높이가 어긋나 바닥선이 깨진다.
+        // 글자 크게 설정에서는 "260 남음"도 한 줄에 안 들어간다. 두 줄까지 받아준다.
+        // 한 타일만 두 줄이 되면 높이가 어긋나는데, 그건 [StatGrid]가 같은 줄의 타일을
+        // 같은 높이로 늘려서 막는다.
         Text(
             text = delta ?: " ",
             style = type.caption,
             color = deltaTone ?: colors.muted,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = ShaSpacing.xs)
         )
@@ -192,7 +196,12 @@ fun StatGrid(rows: List<List<StatItem>>, modifier: Modifier = Modifier) {
 
         Column(verticalArrangement = Arrangement.spacedBy(gap)) {
             rows.forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                // 같은 줄은 같은 높이로. 한 타일의 설명이 두 줄이 되면 나머지도 같이 늘어나
+                // 바닥선이 어긋나지 않는다.
+                Row(
+                    Modifier.height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.spacedBy(gap)
+                ) {
                     row.forEach { item ->
                         StatTile(
                             label = item.label,
@@ -201,7 +210,7 @@ fun StatGrid(rows: List<List<StatItem>>, modifier: Modifier = Modifier) {
                             delta = item.delta,
                             deltaTone = item.deltaTone,
                             valueScale = scale,
-                            modifier = Modifier.weight(item.weight)
+                            modifier = Modifier.weight(item.weight).fillMaxHeight()
                         )
                     }
                 }
